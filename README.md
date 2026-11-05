@@ -1,97 +1,67 @@
-# 🎁 ASB FreeCodes Bot
+# 🎁 ASB FreeCodes Bot (v2)
 
-Telegram Giveaway Bot — **Python + aiogram 3 + MongoDB Atlas**, Koyeb par deploy hone ke liye ready.
+Telegram Giveaway Bot + Website + Mini App — **Python · aiogram 3 · MongoDB Atlas · aiohttp**, Koyeb par deploy hone ke liye ready.
 Bot: http://t.me/ASBFreeCodesBot
+
+## 📁 Files (GitHub repo me ye sab hone chahiye)
+
+```
+bot.py            ← main bot
+site_app.py       ← website + API server (NAYA)
+static/index.html ← website / Mini App page (NAYA)
+requirements.txt  Dockerfile  .gitignore  .dockerignore  .env.example  README.md
+```
+GitHub app/web par `static/index.html` banane ke liye "Create new file" me naam `static/index.html` likhein — folder khud ban jayega.
 
 ## ✨ Features
 
-- `/start` par welcome message + 3 buttons: **Join Channel · Help · Enter Code**
-- Galat code logic: `MAX_WRONG_ATTEMPTS` (3) se zyada galat code ⇒ **24 ghante lock**
-- Ek giveaway me ek user ki **sirf ek entry** (duplicate par "spam mat karein" message)
-- Sahi code par: entry DB me save → bot ka fixed message + **admin ka custom message** user ke DM me → entry details **private log channel** me
-- `/admin` panel: **Stats · Add Giveaway Code · Select Winner · Broadcast · Clear Junk**
-- Select Winner: code winner ke DM me → baaki sabko "winner declare ho gaya" message → purana code + sabhi entries auto-delete (naye giveaway ke liye reset)
-- **Rate-limit queue + FloodWait protection**; bot block karne wale users auto **Junk List** me, **Clear Junk** se permanent remove
-- Saara data MongoDB Atlas me (restart par bhi safe)
+**Giveaway (pehle jaisa):** /start welcome + 3 buttons, galat code lock (24h), ek entry per giveaway, admin custom message, log channel, winner flow (DM + non-winner broadcast + auto reset), FloodWait queue, Junk list.
 
-## 🔧 Setup
+**Naye features:**
+| Feature | Kya karta hai |
+|---|---|
+| 🛡 Verification | 1-tap math captcha — fake accounts/bots rokta hai |
+| 👥 Refer & Earn | Referral link; verified dost = +1 ticket |
+| 🎁 Daily Bonus | Roz claim, streak 3/7/14/30 din par +1/+2/+3/+5 tickets |
+| 🏅 Leaderboard | Top referrers (naam masked) |
+| 🤝 Sponsors | Admin sponsor channels add karta hai; users ko code dene se pehle join karna padta hai; har sponsor ke "verified members" ginti dikhti hai |
+| 🎲 Random Winner | Select Winner me "Random Pick" — tickets ke hisaab se weighted |
+| 📣 Winner Proof | Winner declare hote hi task channel par proof post |
+| 📢 Promo Broadcast | Broadcast ke saath link button (sponsor promotion ke liye) |
+| 🌐 Website + Mini App | Live status, winners proof wall, leaderboard, sponsors, FAQ; Telegram ke andar personal dashboard |
 
-### 1) Bot token
-[@BotFather](https://t.me/BotFather) → `/newbot` ya existing bot ka token lein → ye `BOT_TOKEN` hai.
+## 🌐 Website
+Aapki Koyeb public URL ab ek proper website hai. Bot ke menu me **🌐 Website** button hai aur chat ke menu button se bhi khulti hai (Telegram ke andar Mini App ki tarah). Mini App me user ka apna dashboard (tickets, streak, referrals, rank, referral link) dikhta hai — ye Telegram ke signed `initData` se verify hota hai, to koi doosre ka data nahi dekh sakta. Public page par sirf masked naam (`Ra***`) dikhte hain.
 
-### 2) MongoDB Atlas (free M0)
-1. atlas.mongodb.com par cluster banayein (M0 Free).
-2. **Database Access** → naya user + password banayein.
-3. **Network Access** → `0.0.0.0/0` allow karein (Koyeb ka IP fixed nahi hota).
-4. **Connect → Drivers** se connection string copy karein → ye `MONGO_URI` hai (`<password>` apna daalein).
+## 🔧 Setup (pehli baar)
+1. **BotFather** se token → `BOT_TOKEN`.
+2. **MongoDB Atlas** (M0 free): user banayein, Network Access `0.0.0.0/0`, connection string → `MONGO_URI`.
+3. **Channels:** Log channel me bot **Admin**. Task channel me bot **Admin** (winner proof post ke liye; `REQUIRE_JOIN=true` ho to membership check ke liye bhi).
+4. Files GitHub par upload karein. ⚠️ `BOT_TOKEN`/`MONGO_URI` kabhi repo me na daalein.
+5. **Koyeb:** Web Service → GitHub repo → Builder **Dockerfile** → Instance **Free** → env vars (`BOT_TOKEN`, `MONGO_URI`) → port **8000**, health check path **`/health`** → Deploy.
+6. **Bot ko jagaye rakhna:** Koyeb free instance 1 ghante bina traffic ke sleep ho jata hai. UptimeRobot me HTTP monitor banayein: `https://<aapka-app-url>/health`, interval 5 min. (Website par aane wale visitors ka traffic bhi count hota hai.)
 
-### 3) Channels
-- **Private Log Channel** me bot ko **Admin** banayein (post permission ke saath) — warna entry logs nahi jayenge.
-- Task channel me bot ko Admin banana sirf tab zaroori hai jab `REQUIRE_JOIN=true` rakhein.
+### Update karna (v1 → v2)
+Naye `bot.py`, `site_app.py`, `static/index.html`, `Dockerfile` repo me daalein — Koyeb auto-redeploy karega. Database purana hi rahega; purane users ko ek baar verification karna hoga.
 
-### 4) GitHub par upload
-Is folder ki saari files ek naye repo me daalein (`bot.py`, `requirements.txt`, `Dockerfile`, `.gitignore`, `.dockerignore`, `.env.example`, `README.md`).
-⚠️ **`BOT_TOKEN` aur `MONGO_URI` kabhi GitHub par na daalein** — ye sirf Koyeb ke Environment Variables me jayenge. Agar token leak ho jaye to BotFather me `/revoke` karein.
-
-### 5) Koyeb par deploy
-1. koyeb.com → **Create Service → Web Service → GitHub** → apna repo chunein.
-2. **Builder: Dockerfile**.
-3. **Instance: Free** (region Frankfurt ya Washington D.C.).
-4. **Environment variables** (secret ke roop me daalein):
-   - `BOT_TOKEN`
-   - `MONGO_URI`
-5. **Exposed port: 8000 (HTTP)** · **Health check path: `/health`**.
-6. Deploy dabayein. Logs me `Bot started: @ASBFreeCodesBot` dikhna chahiye.
-
-### 6) Bot ko jagaye rakhna (zaroori)
-Koyeb ka free instance **1 ghante tak koi HTTP traffic na aaye to sleep ho jata hai**, aur ye band nahi kiya ja sakta. Bot polling use karta hai, isliye sleep me bot band ho jayega.
-Fix: [UptimeRobot](https://uptimerobot.com) (free) me ek **HTTP monitor** banayein, URL = `https://<aapka-app>.koyeb.app/health`, interval 5 minute.
-
-> Note: Koyeb ke free plan ki shartein (card verification, regions, limits) badalti rehti hain — signup ke waqt dashboard / koyeb.com/pricing check kar lein.
-
-## 👑 Admin guide
-
-`/admin` bhejein (sirf `ADMIN_ID` ke liye):
-
+## 👑 Admin guide (`/admin`)
 | Button | Kaam |
 |---|---|
-| 📊 Stats | Users, junk, locked, entries, winners, active code |
-| ➕ Add Giveaway Code | Step 1: code · Step 2: custom admin message (sahi code par user ko jata hai) |
-| 🏆 Select Winner | Winner ID → Redeem Code → Confirm. Auto: DM + non-winner broadcast + DB reset |
-| 📢 Broadcast | Koi bhi message (text/photo/video) sabhi active users ko |
-| 🧹 Clear Junk | Blocked users ko permanently delete |
+| 📊 Stats | Users, verified, junk, locked, entries, referrals, sponsors, winners, active code |
+| ➕ Add Giveaway Code | Code → custom admin message |
+| 🏆 Select Winner | Winner ID type karein **ya** 🎲 Random Pick → Redeem Code → Confirm |
+| 📢 Broadcast | Koi bhi message + optional link button |
+| 🧹 Clear Junk | Blocked users permanently delete |
+| 🤝 Sponsors | Sponsor add/remove (channel ID + join link; bot us channel me admin ho) |
 
-Naya giveaway: **Add Giveaway Code** → users code daalte hain → **Select Winner** → process khatam hote hi sab reset.
+**Sponsor se kamai kaise:** sponsor add karein → users ko wo channel join karna padta hai → Sponsors screen me "verified members" ka count sponsor ko dikha sakte hain. Sirf asli channels rakhein, 1–3 sponsor kaafi hain.
 
 ## ⚙️ Environment variables
-
-| Variable | Default | Matlab |
-|---|---|---|
-| `BOT_TOKEN` | — (zaroori) | BotFather token |
-| `MONGO_URI` | — (zaroori) | MongoDB Atlas URI |
-| `DB_NAME` | `asb_freecodes_bot` | Database name |
-| `ADMIN_ID` | `7315805581` | Admin Telegram ID |
-| `SUPPORT_USERNAME` | `@asbhaibsr` | Support username |
-| `TASK_CHANNEL_LINK` / `TASK_CHANNEL_ID` | `https://t.me/asfreecodes` / `-1004474019310` | Task channel |
-| `LOG_CHANNEL_LINK` / `LOG_CHANNEL_ID` | `https://t.me/+Te9_yU3XUQE4MTg1` / `-1003099940809` | Private log channel |
-| `MAX_WRONG_ATTEMPTS` | `3` | Isse zyada galat ⇒ lock |
-| `LOCK_HOURS` | `24` | Lock duration |
-| `SEND_RATE` | `20` | Broadcast speed (msg/sec) |
-| `REQUIRE_JOIN` | `false` | `true` = code lene se pehle channel join check |
-| `WINNER_NOTIFY` | `entries` | `entries` = sirf participants ko winner-message, `all` = sabhi users ko |
-
-## 🧪 Local run
-
-```bash
-pip install -r requirements.txt
-cp .env.example .env      # BOT_TOKEN aur MONGO_URI bharein
-python bot.py
-```
+`.env.example` me poori list hai. Naye: `WEBSITE_URL`, `REFERRAL_TICKETS` (1), `MAX_BONUS_TICKETS` (20), `MAX_SPONSORS` (5), `POST_WINNER_TO_CHANNEL` (true).
 
 ## 📝 Notes
-
-- Code compare **case-insensitive** hota hai (`abc` = `ABC`).
-- Winner declare hote hi sabke galat-attempt count aur locks bhi reset ho jate hain (purana code hat gaya, naya giveaway fresh shuru).
-- Winner process chalte waqt giveaway "closing" rehta hai taaki beech me nayi entries na aayein.
-- Agar winner ko DM nahi ja paya (usne bot block kiya/start nahi kiya), to **kuch bhi delete nahi hota** — dusra winner chun sakte hain.
+- Tickets: entry = 1 ticket. Entry se pehle mile bonus tickets entry par lag jaate hain; entry ke baad mile (referral/streak) seedha entry me jodte hain. Random pick me cap = 1 + `MAX_BONUS_TICKETS`.
+- Winner declare hone par code, entries aur galat-attempt/locks reset hote hain; tickets entries ke saath khatam.
+- Winner ko DM na ja paye to kuch delete nahi hota.
+- Website sirf ek ya do chhote queries cache ke saath chalati hai (20 sec cache), free instance par halki rehti hai.
 - Support: @asbhaibsr
