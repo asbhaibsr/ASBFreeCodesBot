@@ -1,0 +1,13 @@
+# Secrets — kabhi GitHub par upload na karein
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
