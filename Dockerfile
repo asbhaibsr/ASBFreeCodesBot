@@ -9,9 +9,10 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY bot.py .
+COPY bot.py site_app.py ./
+COPY static ./static
 
-# Koyeb health check ke liye (bot.py $PORT par /health serve karta hai)
+# Koyeb health check + website ke liye (site_app.py $PORT par serve karta hai)
 EXPOSE 8000
 
 CMD ["python", "bot.py"]
