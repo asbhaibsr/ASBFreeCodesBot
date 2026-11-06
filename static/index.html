@@ -1,13 +1,10 @@
 <!DOCTYPE html>
-<html lang="hi">
+<html lang="hi" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>ASB FreeCodes — 100% Free Redeem Codes Giveaway</title>
-<meta name="description" content="Channel join karo, task poora karo aur free redeem codes jeeto. 100% free, koi paise nahi.">
-<meta name="theme-color" content="#0a0e1f">
-<meta property="og:title" content="ASB FreeCodes — Free Redeem Codes Giveaway">
-<meta property="og:description" content="100% free giveaway bot. Join karo, tickets kamao, redeem codes jeeto!">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>ASB FreeCodes</title>
+<meta name="theme-color" content="#0b0f1f">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎁%3C/text%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -15,415 +12,531 @@
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 :root{
-  --bg:#0a0e1f; --card:rgba(255,255,255,.055); --line:rgba(255,255,255,.11);
-  --text:#eef1ff; --muted:#9ba5d0; --gold:#ffc83d; --gold2:#ff9a1f;
-  --vio:#7c5cff; --cy:#22d3ee; --pink:#ff4d8d; --ok:#34d399; --warn:#fbbf24; --bad:#fb7185;
-  --r:20px;
+  --bg:#0b0f1f; --surface:rgba(255,255,255,.06); --surface2:rgba(255,255,255,.1); --line:rgba(255,255,255,.1);
+  --text:#eef1ff; --muted:#98a2cc; --gold:#ffc83d; --gold2:#ff9a1f; --vio:#7c5cff; --cy:#22d3ee;
+  --pink:#ff4d8d; --ok:#34d399; --warn:#fbbf24; --bad:#fb7185; --red:#ff4545;
+  --shadow:0 10px 30px rgba(0,0,0,.35); --r:20px; --nav:74px;
+  --top:max(env(safe-area-inset-top,0px),var(--tg-content-safe-area-inset-top,0px));
+  --bot:env(safe-area-inset-bottom,0px);
 }
-*{box-sizing:border-box;margin:0;padding:0}
-html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
-body{
-  font-family:'Poppins',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
-  background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden;
-  padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom);
+html[data-theme="light"]{
+  --bg:#f2f4ff; --surface:#ffffff; --surface2:#eceffd; --line:rgba(20,30,80,.1);
+  --text:#141a3a; --muted:#5d678f; --shadow:0 8px 24px rgba(40,50,120,.12);
 }
-body::before,body::after{content:"";position:fixed;z-index:-1;border-radius:50%;filter:blur(100px);animation:float 18s ease-in-out infinite}
-body::before{width:540px;height:540px;background:var(--vio);opacity:.42;top:-180px;left:-140px}
-body::after{width:500px;height:500px;background:var(--pink);opacity:.26;bottom:-180px;right:-140px;animation-delay:-9s}
-@keyframes float{50%{transform:translate(50px,36px) scale(1.12)}}
-a{color:inherit;text-decoration:none}
-.wrap{width:min(1120px,100% - 32px);margin-inline:auto}
-section{padding:64px 0}
-h1,h2,h3{line-height:1.2;letter-spacing:-.02em}
-.grad{background:linear-gradient(100deg,var(--gold),var(--pink) 55%,var(--vio));-webkit-background-clip:text;background-clip:text;color:transparent}
-.eyebrow{display:inline-block;font-size:.78rem;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--cy);margin-bottom:10px}
-.sec-title{font-size:clamp(1.6rem,4.5vw,2.4rem);font-weight:800;margin-bottom:10px}
-.sec-sub{color:var(--muted);max-width:620px;margin-bottom:34px}
-.glass{background:var(--card);border:1px solid var(--line);border-radius:var(--r);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html{-webkit-text-size-adjust:100%}
+body{font-family:'Poppins',system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);line-height:1.5;min-height:100vh;overflow-x:hidden;user-select:none;-webkit-user-select:none}
+body::before,body::after{content:"";position:fixed;z-index:-1;border-radius:50%;filter:blur(90px);pointer-events:none}
+body::before{width:420px;height:420px;background:var(--vio);opacity:.38;top:-150px;left:-130px}
+body::after{width:380px;height:380px;background:var(--pink);opacity:.22;bottom:-140px;right:-120px}
+html[data-theme="light"] body::before,html[data-theme="light"] body::after{opacity:.12}
+button{font-family:inherit;cursor:pointer;border:0;color:inherit;background:none}
+input{font-family:inherit}
+[hidden]{display:none!important}
+.mut{color:var(--muted)}
 
-/* nav */
-.nav{position:sticky;top:0;z-index:50;background:rgba(10,14,31,.72);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
-.nav .wrap{display:flex;align-items:center;justify-content:space-between;height:62px;gap:16px}
-.logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:1.05rem}
-.logo i{font-style:normal;display:grid;place-items:center;width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--gold),var(--pink));font-size:1.15rem;box-shadow:0 6px 20px rgba(255,77,141,.4)}
-.nav-links{display:flex;gap:22px;font-size:.9rem;color:var(--muted)}
-.nav-links a:hover{color:var(--text)}
-@media(max-width:760px){.nav-links{display:none}}
+/* layout */
+header.top{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;padding:calc(var(--top) + 12px) 16px 12px;background:linear-gradient(var(--bg) 70%,transparent)}
+.av{flex:none;display:grid;place-items:center;border-radius:50%;font-weight:800;color:#fff;overflow:hidden;text-transform:uppercase}
+.av img{width:100%;height:100%;object-fit:cover}
+.hdr-txt{flex:1;min-width:0;line-height:1.25}
+.hdr-txt small{color:var(--muted);font-size:.74rem}
+.hdr-txt b{display:block;font-size:1.02rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.live-badge{display:flex;align-items:center;gap:6px;padding:6px 12px;border-radius:999px;font-size:.74rem;font-weight:800;background:rgba(255,69,69,.15);color:var(--red);animation:pop 1.6s infinite}
+.live-badge::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--red)}
+@keyframes pop{50%{transform:scale(1.07)}}
+main{padding:4px 16px calc(var(--nav) + var(--bot) + 28px);max-width:640px;margin:0 auto}
+.tab{display:none;animation:fade .3s}
+.tab.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}}
+.h2{font-size:1.25rem;font-weight:800;margin:6px 2px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.h2 small{font-size:.76rem;font-weight:600;color:var(--muted)}
+
+/* cards */
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px;box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
+.card h3{font-size:1rem;margin-bottom:4px}
+.card p{font-size:.88rem;color:var(--muted)}
+.hero{background:linear-gradient(135deg,rgba(124,92,255,.35),rgba(255,77,141,.25));border-color:rgba(255,255,255,.18)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.row3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{padding:14px 8px;text-align:center;border-radius:16px;background:var(--surface2)}
+.stat b{display:block;font-size:1.45rem;font-weight:800;line-height:1.2}
+.stat span{font-size:.7rem;color:var(--muted)}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 11px;border-radius:999px;font-size:.72rem;font-weight:700;background:var(--surface2)}
+.pill.ok{background:rgba(52,211,153,.16);color:var(--ok)}
+.pill.warn{background:rgba(251,191,36,.16);color:var(--warn)}
+.pill.bad{background:rgba(251,113,133,.16);color:var(--bad)}
+.pill.live{background:rgba(255,69,69,.16);color:var(--red)}
+.notice{border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)}
+.notice b{color:var(--warn)}
+.flex{display:flex;align-items:center;gap:10px}
+.sp{justify-content:space-between}
+.mt{margin-top:12px}
 
 /* buttons */
-.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:14px 26px;border-radius:14px;font-weight:700;font-size:1rem;border:1px solid transparent;cursor:pointer;transition:transform .2s,box-shadow .2s,background .2s;font-family:inherit}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px 18px;border-radius:14px;font-weight:700;font-size:.95rem;background:var(--surface2);border:1px solid var(--line);transition:transform .15s,opacity .15s}
 .btn:active{transform:scale(.97)}
-.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#2a1800;box-shadow:0 10px 30px rgba(255,154,31,.38)}
-.btn-gold:hover{transform:translateY(-2px);box-shadow:0 14px 38px rgba(255,154,31,.5)}
-.btn-ghost{background:rgba(255,255,255,.06);border-color:var(--line);color:var(--text)}
-.btn-ghost:hover{background:rgba(255,255,255,.11);transform:translateY(-2px)}
-.btn-sm{padding:9px 18px;font-size:.88rem;border-radius:11px}
+.btn[disabled]{opacity:.5;pointer-events:none}
+.btn.gold{background:linear-gradient(135deg,var(--gold),var(--gold2));color:#2a1800;border:0;box-shadow:0 8px 24px rgba(255,154,31,.35)}
+.btn.vio{background:linear-gradient(135deg,var(--vio),var(--pink));color:#fff;border:0}
+.btn.sm{width:auto;padding:9px 16px;font-size:.84rem;border-radius:11px}
+.claim{position:relative;width:100%;padding:22px 16px;border-radius:22px;font-size:1.35rem;font-weight:800;letter-spacing:.02em;color:#fff;background:linear-gradient(135deg,#ff4545,#ff8a1f);box-shadow:0 12px 36px rgba(255,69,69,.5);animation:ring 1.4s infinite}
+.claim:active{transform:scale(.96)}
+.claim[disabled]{animation:none;opacity:.6}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(255,100,60,.6),0 12px 36px rgba(255,69,69,.5)}100%{box-shadow:0 0 0 22px rgba(255,100,60,0),0 12px 36px rgba(255,69,69,.5)}}
 
-/* hero */
-.hero{padding:56px 0 40px}
-.hero-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:36px;align-items:center}
-@media(max-width:900px){.hero-grid{grid-template-columns:1fr}}
-.badge{display:inline-flex;align-items:center;gap:8px;padding:7px 16px;border-radius:999px;font-size:.84rem;font-weight:600;background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);color:var(--ok);margin-bottom:20px}
-.hero h1{font-size:clamp(2.2rem,7vw,3.9rem);font-weight:800;margin-bottom:18px}
-.hero p.lead{color:var(--muted);font-size:1.08rem;max-width:520px;margin-bottom:28px}
-.cta{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:26px}
-.trust{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:.88rem;color:var(--muted)}
-.trust b{color:var(--ok)}
+/* progress */
+.bar{height:10px;border-radius:99px;background:var(--surface2);overflow:hidden}
+.bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--pink));transition:width .5s}
+.dots{display:flex;gap:6px;margin:10px 0}
+.dots span{flex:1;height:8px;border-radius:99px;background:var(--surface2)}
+.dots span.on{background:linear-gradient(90deg,var(--gold),var(--gold2))}
 
-/* live card */
-.live{padding:26px;position:relative;overflow:hidden}
-.live::before{content:"";position:absolute;inset:-1px;border-radius:var(--r);padding:1px;background:linear-gradient(135deg,var(--gold),transparent 40%,var(--vio));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
-.live-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
-.live-head h3{font-size:1.05rem}
-.pill{display:inline-flex;align-items:center;gap:7px;padding:5px 13px;border-radius:999px;font-size:.78rem;font-weight:700}
-.pill::before{content:"";width:8px;height:8px;border-radius:50%;background:currentColor;animation:pulse 1.6s infinite}
-.pill.live-on{background:rgba(52,211,153,.14);color:var(--ok)}
-.pill.live-closing{background:rgba(251,191,36,.14);color:var(--warn)}
-.pill.live-off{background:rgba(251,113,133,.14);color:var(--bad)}
-@keyframes pulse{50%{opacity:.3;transform:scale(1.5)}}
-.big{font-size:3.1rem;font-weight:800;line-height:1}
-.big small{display:block;font-size:.84rem;font-weight:500;color:var(--muted);margin-top:6px}
-.ticker{margin-top:20px;display:grid;gap:8px}
-.ticker div{display:flex;justify-content:space-between;gap:10px;font-size:.86rem;padding:9px 13px;border-radius:12px;background:rgba(255,255,255,.04);animation:slide .5s both}
-.ticker span:last-child{color:var(--muted);white-space:nowrap}
-@keyframes slide{from{opacity:0;transform:translateY(8px)}}
-.live .btn{width:100%;margin-top:20px}
+/* countdown */
+.cd{display:flex;gap:10px;justify-content:center;margin:14px 0}
+.cd div{min-width:72px;padding:12px 6px;border-radius:16px;background:var(--surface2);text-align:center}
+.cd b{display:block;font-size:2rem;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
+.cd span{font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 
-/* stats */
-.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;padding:6px 0 0}
-@media(max-width:640px){.stats{grid-template-columns:1fr 1fr 1fr;gap:10px}}
-.stat{padding:22px 14px;text-align:center}
-.stat b{display:block;font-size:clamp(1.5rem,5vw,2.3rem);font-weight:800}
-.stat span{font-size:.82rem;color:var(--muted)}
+/* lists */
+.item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:15px;background:var(--surface);border:1px solid var(--line);margin-bottom:8px}
+.item.me{border-color:var(--gold);background:rgba(255,200,61,.1)}
+.item .nm{flex:1;min-width:0}
+.item .nm b{display:block;font-size:.93rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .nm small{color:var(--muted);font-size:.74rem}
+.chip{padding:4px 10px;border-radius:999px;font-size:.76rem;font-weight:700;background:rgba(255,200,61,.15);color:var(--gold);white-space:nowrap}
+.rk{width:28px;text-align:center;font-weight:800}
+.search{width:100%;padding:12px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:.92rem;margin-bottom:12px;user-select:text;-webkit-user-select:text}
+.empty{padding:28px 16px;text-align:center;color:var(--muted);font-size:.9rem;border:1px dashed var(--line);border-radius:var(--r);margin-bottom:12px}
+.seg{display:flex;padding:4px;border-radius:14px;background:var(--surface2);margin-bottom:14px}
+.seg button{flex:1;padding:10px;border-radius:11px;font-weight:700;font-size:.86rem;color:var(--muted)}
+.seg button.on{background:linear-gradient(135deg,var(--vio),var(--pink));color:#fff}
+.podium{display:flex;align-items:flex-end;justify-content:center;gap:10px;margin:8px 0 18px}
+.pod{flex:1;max-width:110px;text-align:center}
+.pod .av{margin:0 auto 6px}
+.pod b{display:block;font-size:.82rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pod small{color:var(--gold);font-weight:700;font-size:.78rem}
+.pod .step{margin-top:6px;border-radius:14px 14px 0 0;display:grid;place-items:start center;padding-top:8px;font-size:1.5rem;background:linear-gradient(180deg,var(--surface2),transparent)}
+.code{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:var(--surface2);margin-top:8px}
+.code code{flex:1;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.95rem;word-break:break-all;user-select:text;-webkit-user-select:text}
 
-/* grid cards */
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
-.card{padding:26px;transition:transform .25s,border-color .25s}
-.card:hover{transform:translateY(-5px);border-color:rgba(255,255,255,.25)}
-.num{width:42px;height:42px;border-radius:13px;display:grid;place-items:center;font-weight:800;margin-bottom:14px;background:linear-gradient(135deg,var(--vio),var(--cy));box-shadow:0 8px 22px rgba(124,92,255,.4)}
-.ico{font-size:2rem;margin-bottom:10px;display:block}
-.card h3{font-size:1.1rem;margin-bottom:6px}
-.card p{color:var(--muted);font-size:.93rem}
-.mile{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
-.mile span{font-size:.78rem;padding:4px 10px;border-radius:999px;background:rgba(255,200,61,.12);color:var(--gold);font-weight:600}
+/* nav */
+nav.tabs{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bot) + 10px);width:min(620px,100% - 20px);height:var(--nav);display:flex;justify-content:space-around;align-items:center;padding:6px;border-radius:26px;background:rgba(18,22,48,.82);border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.45);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);z-index:40}
+html[data-theme="light"] nav.tabs{background:rgba(255,255,255,.9)}
+nav.tabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:18px;font-size:.62rem;font-weight:600;color:var(--muted);transition:.2s}
+nav.tabs button i{font-style:normal;font-size:1.4rem;line-height:1;transition:transform .2s}
+nav.tabs button.on{color:var(--text);background:var(--surface2)}
+nav.tabs button.on i{transform:translateY(-2px) scale(1.12)}
+nav.tabs button.hot i{filter:drop-shadow(0 0 8px var(--gold))}
+nav.tabs button .dot{position:absolute;top:6px;right:calc(50% - 20px);width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 0 3px rgba(255,69,69,.25);animation:pop 1.2s infinite}
 
-/* dashboard */
-#me{display:none}
-.me-box{padding:28px}
-.me-top{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:20px}
-.me-top h3{font-size:1.25rem}
-.me-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-@media(max-width:640px){.me-grid{grid-template-columns:1fr 1fr}}
-.me-cell{padding:16px;border-radius:16px;background:rgba(255,255,255,.05);text-align:center}
-.me-cell b{display:block;font-size:1.7rem;font-weight:800}
-.me-cell span{font-size:.78rem;color:var(--muted)}
-.me-note{margin-top:16px;padding:12px 16px;border-radius:12px;font-size:.9rem;background:rgba(124,92,255,.14);border:1px solid rgba(124,92,255,.35)}
-.reflink{display:flex;gap:10px;margin-top:16px;flex-wrap:wrap}
-.reflink input{flex:1 1 220px;min-width:0;padding:13px 15px;border-radius:12px;border:1px solid var(--line);background:rgba(0,0,0,.25);color:var(--text);font:inherit;font-size:.85rem}
+/* sheet + toast */
+.sheet-bg{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;animation:fadeBg .25s}
+@keyframes fadeBg{from{opacity:0}}
+.sheet{width:min(640px,100%);background:var(--bg);border:1px solid var(--line);border-radius:26px 26px 0 0;padding:24px 20px calc(var(--bot) + 24px);animation:up .3s;text-align:center}
+@keyframes up{from{transform:translateY(60px);opacity:0}}
+.sheet h3{font-size:1.3rem;margin-bottom:6px}
+.toast{position:fixed;left:50%;top:calc(var(--top) + 14px);transform:translate(-50%,-30px);opacity:0;z-index:80;padding:11px 18px;border-radius:14px;background:#1d2350;color:#fff;font-size:.86rem;font-weight:600;box-shadow:var(--shadow);transition:.3s;max-width:88%;text-align:center;pointer-events:none}
+.toast.show{transform:translate(-50%,0);opacity:1}
+canvas#fx{position:fixed;inset:0;z-index:90;pointer-events:none}
 
-/* winners / lists */
-.winner{padding:22px;display:flex;gap:14px;align-items:center}
-.avatar{flex:none;width:48px;height:48px;border-radius:50%;display:grid;place-items:center;font-size:1.4rem;background:linear-gradient(135deg,var(--gold),var(--pink))}
-.winner h4{font-size:1rem}
-.winner small{color:var(--muted)}
-.empty{padding:26px;text-align:center;color:var(--muted);border:1px dashed var(--line);border-radius:var(--r)}
-.board{padding:10px 8px;max-width:620px}
-.row{display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:14px}
-.row:nth-child(odd){background:rgba(255,255,255,.035)}
-.row .rk{width:32px;font-weight:800;font-size:1.1rem;text-align:center}
-.row .nm{flex:1;font-weight:600}
-.row .ct{color:var(--gold);font-weight:700}
-
-/* sponsors */
-.sponsor{padding:22px;display:flex;flex-direction:column;gap:14px}
-.sponsor .sp-top{display:flex;gap:13px;align-items:center}
-.sp-logo{flex:none;width:46px;height:46px;border-radius:14px;display:grid;place-items:center;font-weight:800;font-size:1.2rem;background:linear-gradient(135deg,var(--cy),var(--vio))}
-.sponsor h4{font-size:1rem;word-break:break-word}
-.sponsor small{color:var(--muted)}
-.sp-cta{background:linear-gradient(135deg,rgba(124,92,255,.22),rgba(255,77,141,.18));text-align:center;justify-content:center}
-
-/* faq */
-details{padding:18px 22px;margin-bottom:12px}
-summary{cursor:pointer;font-weight:600;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px}
-summary::-webkit-details-marker{display:none}
-summary::after{content:"+";font-size:1.4rem;color:var(--gold);transition:transform .2s}
-details[open] summary::after{transform:rotate(45deg)}
-details p{color:var(--muted);margin-top:12px;font-size:.95rem}
-
-footer{padding:40px 0 56px;border-top:1px solid var(--line);color:var(--muted);font-size:.88rem}
-footer .wrap{display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px}
-footer a{color:var(--text);text-decoration:underline;text-underline-offset:3px}
-
-.reveal{opacity:0;transform:translateY(22px);transition:opacity .7s,transform .7s}
-.reveal.in{opacity:1;transform:none}
-@media(prefers-reduced-motion:reduce){
-  *{animation:none!important;transition:none!important}
-  .reveal{opacity:1;transform:none}
-  html{scroll-behavior:auto}
-}
+/* skeleton + gate */
+.sk{height:96px;border-radius:var(--r);margin-bottom:14px;background:linear-gradient(90deg,var(--surface) 25%,var(--surface2) 50%,var(--surface) 75%);background-size:200% 100%;animation:sh 1.3s infinite}
+@keyframes sh{to{background-position:-200% 0}}
+.gate{min-height:100vh;display:grid;place-items:center;padding:24px;text-align:center}
+.gate .card{max-width:380px}
+.gate .big{font-size:3.2rem}
+details.faq{padding:14px 16px;margin-bottom:8px}
+details.faq summary{font-weight:600;font-size:.9rem;cursor:pointer;list-style:none;display:flex;justify-content:space-between}
+details.faq summary::-webkit-details-marker{display:none}
+details.faq summary::after{content:"+";color:var(--gold);font-size:1.2rem}
+details.faq[open] summary::after{content:"–"}
+details.faq p{margin-top:8px}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
 <body>
 
-<header class="nav">
-  <div class="wrap">
-    <a href="#top" class="logo"><i>🎁</i> ASB FreeCodes</a>
-    <nav class="nav-links">
-      <a href="#how">How it works</a><a href="#earn">Extra Tickets</a>
-      <a href="#winners">Winners</a><a href="#sponsors">Sponsors</a><a href="#faq">FAQ</a>
-    </nav>
-    <a class="btn btn-gold btn-sm" data-tg href="#" id="navBot">Open Bot</a>
+<div id="gate" class="gate" hidden>
+  <div class="card">
+    <div class="big">🎁</div>
+    <h3 style="font-size:1.3rem;margin:6px 0">ASB FreeCodes</h3>
+    <p>Ye ek <b>Telegram Mini App</b> hai. Isse Telegram ke andar bot se kholein — daily bonus, free code drops, leaderboard sab wahin milega.</p>
+    <a id="gateBtn" class="btn gold mt" style="text-decoration:none" href="#">🤖 Bot kholo</a>
   </div>
-</header>
-
-<main id="top">
-<!-- HERO -->
-<section class="hero">
-  <div class="wrap hero-grid">
-    <div>
-      <span class="badge">💯 100% FREE · Koi paise nahi, kabhi nahi</span>
-      <h1>Jeeto <span class="grad">Free Redeem Codes</span> Roz! 🎉</h1>
-      <p class="lead">Channel join karo, task poora karo, tickets kamao aur redeem code seedha apne Telegram DM me pao. Na koi fees, na koi chaalaaki.</p>
-      <div class="cta">
-        <a class="btn btn-gold" data-tg href="#" id="heroBot">🚀 Start on Telegram</a>
-        <a class="btn btn-ghost" data-tg href="#" id="heroCh">📢 Join Channel</a>
-      </div>
-      <div class="trust"><span><b>✔</b> 100% Free</span><span><b>✔</b> Real winners</span><span><b>✔</b> Code seedha DM me</span></div>
-    </div>
-
-    <aside class="glass live reveal">
-      <div class="live-head"><h3>🎁 Live Giveaway</h3><span class="pill live-off" id="gwPill">Loading…</span></div>
-      <div class="big"><span id="gwEntries" data-n="0">0</span><small>Entries abhi tak</small></div>
-      <div class="ticker" id="ticker"></div>
-      <a class="btn btn-gold" data-tg href="#" id="liveBot">🔑 Enter Giveaway</a>
-    </aside>
-  </div>
-</section>
-
-<!-- STATS -->
-<div class="wrap stats reveal">
-  <div class="glass stat"><b id="stUsers" data-n="0">0</b><span>Total Users</span></div>
-  <div class="glass stat"><b id="stWinners" data-n="0">0</b><span>Winners Declared</span></div>
-  <div class="glass stat"><b id="stEntries" data-n="0">0</b><span>Current Entries</span></div>
 </div>
 
-<!-- MY DASHBOARD (Mini App only) -->
-<section id="me">
-  <div class="wrap">
-    <div class="glass me-box reveal">
-      <div class="me-top"><h3>👋 <span id="meName">Aapka</span> Dashboard</h3><span class="pill live-on" id="meBadge">Verified</span></div>
-      <div class="me-grid">
-        <div class="me-cell"><b id="meTickets">0</b><span>🎟 Tickets</span></div>
-        <div class="me-cell"><b id="meStreak">0</b><span>🔥 Streak (din)</span></div>
-        <div class="me-cell"><b id="meRefs">0</b><span>👥 Referrals</span></div>
-        <div class="me-cell"><b id="meRank">—</b><span>🏅 Rank</span></div>
-      </div>
-      <div class="me-note" id="meNote"></div>
-      <div class="reflink">
-        <input id="refInput" readonly aria-label="Referral link">
-        <button class="btn btn-gold btn-sm" id="copyBtn">📋 Copy</button>
-        <button class="btn btn-ghost btn-sm" id="shareBtn">📤 Share</button>
-      </div>
-    </div>
-  </div>
-</section>
+<div id="app" hidden>
+  <header class="top">
+    <div class="av" id="hdrAv" style="width:44px;height:44px"></div>
+    <div class="hdr-txt"><small>Namaste 👋</small><b id="hdrName">…</b></div>
+    <span class="live-badge" id="hdrLive" hidden>DROP LIVE</span>
+  </header>
 
-<!-- HOW -->
-<section id="how">
-  <div class="wrap">
-    <span class="eyebrow">Simple 4 steps</span>
-    <h2 class="sec-title">Kaise <span class="grad">jeetein?</span></h2>
-    <p class="sec-sub">Bas 4 steps — 2 minute ka kaam.</p>
-    <div class="grid">
-      <div class="glass card reveal"><div class="num">1</div><h3>Bot Start Karo</h3><p>Telegram par bot kholo, ek chhota verification karo (1 tap).</p></div>
-      <div class="glass card reveal"><div class="num">2</div><h3>Channel Join Karo</h3><p>Hamara channel join karo aur diye gaye sahi link se task poora karke code lao.</p></div>
-      <div class="glass card reveal"><div class="num">3</div><h3>Code Enter Karo</h3><p>Bot me “Enter Code” dabao aur sahi code bhejo. Entry confirm!</p></div>
-      <div class="glass card reveal"><div class="num">4</div><h3>Winner Bano 🏆</h3><p>Winner ko redeem code seedha DM me milta hai. Baaki ko agli baar ka mauka.</p></div>
-    </div>
-  </div>
-</section>
+  <main>
+    <section class="tab active" id="t-home"><div class="sk"></div><div class="sk"></div><div class="sk"></div></section>
+    <section class="tab" id="t-entries"></section>
+    <section class="tab" id="t-drops"></section>
+    <section class="tab" id="t-winners"></section>
+    <section class="tab" id="t-board"></section>
+    <section class="tab" id="t-me"></section>
+  </main>
 
-<!-- EARN -->
-<section id="earn">
-  <div class="wrap">
-    <span class="eyebrow">Zyada tickets = zyada chance</span>
-    <h2 class="sec-title">Extra <span class="grad">tickets</span> kamao</h2>
-    <p class="sec-sub">Random winner pick me jitne zyada tickets, utna zyada chance.</p>
-    <div class="grid">
-      <div class="glass card reveal"><span class="ico">👥</span><h3>Refer &amp; Earn</h3><p>Dost ko apna link bhejo. Wo verify kare to aapko <b>+1 ticket</b>.</p></div>
-      <div class="glass card reveal"><span class="ico">🔥</span><h3>Daily Streak</h3><p>Roz Daily Bonus claim karo, streak badhao aur milestones par tickets pao.</p>
-        <div class="mile"><span>3 din → +1</span><span>7 din → +2</span><span>14 din → +3</span><span>30 din → +5</span></div></div>
-      <div class="glass card reveal"><span class="ico">🏅</span><h3>Leaderboard</h3><p>Top referrers ki list me jagah banao aur sabko dikhao kaun hai champion.</p></div>
-    </div>
-  </div>
-</section>
+  <nav class="tabs" id="nav">
+    <button data-t="home" class="on"><i>🏠</i>Home</button>
+    <button data-t="entries"><i>🎟</i>Entries</button>
+    <button data-t="drops" id="navDrops"><i>⚡</i>Drops</button>
+    <button data-t="winners"><i>🏆</i>Winners</button>
+    <button data-t="board"><i>🏅</i>Board</button>
+    <button data-t="me"><i>👤</i>Profile</button>
+  </nav>
+</div>
 
-<!-- WINNERS -->
-<section id="winners">
-  <div class="wrap">
-    <span class="eyebrow">Proof wall</span>
-    <h2 class="sec-title">Pichhle <span class="grad">winners</span> 🏆</h2>
-    <p class="sec-sub">Har winner ko code seedha DM me jata hai. Privacy ke liye naam chhupe hue hain.</p>
-    <div class="grid" id="winnerList"></div>
-  </div>
-</section>
-
-<!-- LEADERBOARD -->
-<section id="top-ref">
-  <div class="wrap">
-    <span class="eyebrow">Leaderboard</span>
-    <h2 class="sec-title">Top <span class="grad">Referrers</span> 🏅</h2>
-    <p class="sec-sub">Sabse zyada dosto ko laane wale champions.</p>
-    <div class="glass board reveal" id="board"></div>
-  </div>
-</section>
-
-<!-- SPONSORS -->
-<section id="sponsors">
-  <div class="wrap">
-    <span class="eyebrow">Partners</span>
-    <h2 class="sec-title">Hamare <span class="grad">Sponsors</span> 🤝</h2>
-    <p class="sec-sub">In channels ko join karke aap hamein support karte ho — aur inke updates bhi pate ho.</p>
-    <div class="grid" id="sponsorList"></div>
-  </div>
-</section>
-
-<!-- FAQ -->
-<section id="faq">
-  <div class="wrap" style="max-width:780px">
-    <span class="eyebrow">FAQ</span>
-    <h2 class="sec-title">Aksar <span class="grad">puche jaane wale</span> sawaal</h2>
-    <p class="sec-sub"></p>
-    <details class="glass"><summary>Kya sach me 100% free hai?</summary><p>Haan. Yahan koi paise nahi maange jaate. Kabhi koi aapse payment maange to use report karein.</p></details>
-    <details class="glass"><summary>Winner kaise chuna jata hai?</summary><p>Winner ya to random pick se (tickets ke hisaab se) ya admin dwara chuna jata hai. Winner ko redeem code seedha DM me bheja jata hai aur channel par proof post hota hai.</p></details>
-    <details class="glass"><summary>Code kahan se milega?</summary><p>Channel par diye gaye sahi link se. Galat code baar-baar daalne par 24 ghante ke liye lock lag jata hai.</p></details>
-    <details class="glass"><summary>Verification kyun?</summary><p>Fake accounts aur bots rokne ke liye, taaki sabko barabar mauka mile.</p></details>
-    <details class="glass"><summary>Tickets kaise badhayein?</summary><p>Dosto ko refer karo (+1 per dost), aur Daily Bonus ki streak banao (3/7/14/30 din par extra tickets).</p></details>
-    <details class="glass"><summary>Sponsor kaise banein?</summary><p>Apne channel ki promotion ke liye admin se contact karein: <a href="#" id="faqSupport" style="color:var(--gold)">support</a>.</p></details>
-  </div>
-</section>
-</main>
-
-<footer>
-  <div class="wrap">
-    <span>© <span id="yr"></span> ASB FreeCodes · 100% Free Giveaway Bot</span>
-    <span>Support: <a href="#" data-tg id="footSupport">support</a> · <a href="#" data-tg id="footCh">Channel</a></span>
-  </div>
-</footer>
+<div class="toast" id="toast"></div>
+<canvas id="fx"></canvas>
 
 <script>
 window.APP_CONFIG = /*__CONFIG__*/{};
 (function(){
-  "use strict";
-  var cfg = window.APP_CONFIG || {};
-  var tg = window.Telegram && window.Telegram.WebApp;
-  var inTG = !!(tg && tg.initData);
-  var $ = function(s){return document.querySelector(s)};
-  var safeUrl = function(u){return /^https?:\/\//i.test(u||"") ? u : "#"};
+"use strict";
+var cfg = window.APP_CONFIG || {};
+var tg = window.Telegram && window.Telegram.WebApp;
+var inTG = !!(tg && tg.initData);
+var $ = function(s,r){return (r||document).querySelector(s)};
+var MILES = [3,7,14,30];
+var S = {data:null, tab:"home", offset:0, board:"refs", search:"", loading:false, timer:null, fired:{}};
 
-  /* ---- links (Mini App ke andar Telegram links native khulte hain) ---- */
-  var botUrl = cfg.bot_link || "https://t.me/"+(cfg.bot_username||"");
-  var map = {navBot:botUrl, heroBot:botUrl, liveBot:botUrl, heroCh:cfg.channel_link, footCh:cfg.channel_link, footSupport:cfg.support_link, faqSupport:cfg.support_link};
-  Object.keys(map).forEach(function(id){var el=document.getElementById(id); if(el){el.href=safeUrl(map[id]); if(id==="footSupport"||id==="faqSupport") el.textContent=cfg.support_username||"support";}});
-  document.querySelectorAll("[data-tg]").forEach(function(a){
-    a.addEventListener("click",function(e){
-      var u=a.href;
-      if(inTG && /^https?:\/\/t\.me\//i.test(u)){e.preventDefault(); tg.openTelegramLink(u);}
-      else if(a.getAttribute("href")!=="#"){a.target="_blank"; a.rel="noopener";}
-    });
+/* ------------------------------------------------ helpers */
+function el(tag,cls,text){var n=document.createElement(tag); if(cls)n.className=cls; if(text!=null)n.textContent=text; return n;}
+function now(){return Date.now()+S.offset;}
+function num(n){return (+n||0).toLocaleString("en-IN");}
+function hue(name){var h=0,s=String(name||"");for(var i=0;i<s.length;i++)h=(h*31+s.charCodeAt(i))%360;return h;}
+function avatar(name,size,photo){
+  var a=el("div","av"); a.style.width=a.style.height=size+"px"; a.style.fontSize=(size*.42)+"px";
+  var h=hue(name); a.style.background="linear-gradient(135deg,hsl("+h+" 75% 55%),hsl("+((h+50)%360)+" 75% 45%))";
+  a.textContent=(String(name||"?").trim().charAt(0)||"?");
+  if(photo){var im=new Image(); im.onload=function(){a.textContent="";a.appendChild(im);}; im.src=photo;}
+  return a;
+}
+function ago(iso){
+  if(!iso) return ""; var s=Math.max(1,(now()-new Date(iso).getTime())/1000);
+  if(s<60) return "abhi abhi"; if(s<3600) return Math.floor(s/60)+" min pehle";
+  if(s<86400) return Math.floor(s/3600)+" ghante pehle"; return Math.floor(s/86400)+" din pehle";
+}
+function istTime(iso){
+  try{return new Date(iso).toLocaleString("en-IN",{timeZone:"Asia/Kolkata",hour:"2-digit",minute:"2-digit",hour12:true,day:"2-digit",month:"short"});}catch(e){return "";}
+}
+function sec(ms){return (ms/1000).toFixed(1)+" sec";}
+function haptic(k){try{tg.HapticFeedback.impactOccurred(k||"light");}catch(e){}}
+function notify(k){try{tg.HapticFeedback.notificationOccurred(k||"success");}catch(e){}}
+function toast(msg){var t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove("show")},2600);}
+function safeUrl(u){return /^https?:\/\//i.test(u||"")?u:"#";}
+function openLink(u){
+  u=safeUrl(u); if(u==="#")return;
+  try{ if(/^https?:\/\/t\.me\//i.test(u)&&tg&&tg.openTelegramLink) return tg.openTelegramLink(u);
+       if(tg&&tg.openLink) return tg.openLink(u);}catch(e){}
+  window.open(u,"_blank","noopener");
+}
+function openBot(){openLink(cfg.bot_link||("https://t.me/"+cfg.bot_username));}
+function copy(text,msg){
+  var done=function(){toast(msg||"✅ Copy ho gaya");notify("success");};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,fallback);}else fallback();
+  function fallback(){var i=document.createElement("input");i.value=text;document.body.appendChild(i);i.select();try{document.execCommand("copy");}catch(e){}i.remove();done();}
+}
+function B(label,cls,fn){var b=el("button","btn "+(cls||""),label); if(fn)b.addEventListener("click",function(){haptic();fn(b);}); return b;}
+function card(cls){return el("div","card "+(cls||""));}
+function empty(t){return el("div","empty",t);}
+
+/* ------------------------------------------------ api */
+function api(path,extra){
+  var body=Object.assign({initData:tg.initData},extra||{});
+  return fetch(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)})
+    .then(function(r){return r.json().catch(function(){return {ok:false,error:"bad response"}});});
+}
+function load(){
+  if(S.loading) return Promise.resolve();
+  S.loading=true;
+  return api("/api/app").then(function(d){
+    S.loading=false;
+    if(!d||!d.ok){ if(d&&d.error==="unauthorized") toast("Session expire — app dobara kholein"); return; }
+    S.data=d; S.offset=d.server_ms-Date.now(); render();
+  }).catch(function(){S.loading=false;});
+}
+function nextDelay(){
+  var cur=S.data&&S.data.drops.current;
+  if(cur){ if(cur.status==="live") return 3000;
+    var rem=(new Date(cur.go_live_at).getTime()-now())/1000; if(rem<150) return 3000; }
+  return 20000;
+}
+function loop(){ if(document.hidden){S.timer=setTimeout(loop,3000);return;} load().then(function(){S.timer=setTimeout(loop,nextDelay());}); }
+function burst(){var n=0;(function b(){load().then(function(){var c=S.data&&S.data.drops.current;if((!c||c.status!=="live")&&n++<14)setTimeout(b,700);});})();}
+
+/* ------------------------------------------------ tabs */
+function go(t){
+  S.tab=t; haptic("light");
+  document.querySelectorAll(".tab").forEach(function(x){x.classList.toggle("active",x.id==="t-"+t);});
+  document.querySelectorAll("#nav button").forEach(function(x){x.classList.toggle("on",x.getAttribute("data-t")===t);});
+  window.scrollTo(0,0);
+}
+document.querySelectorAll("#nav button").forEach(function(b){b.addEventListener("click",function(){go(b.getAttribute("data-t"));});});
+
+/* ------------------------------------------------ renderers */
+function render(){
+  var d=S.data; if(!d) return;
+  var me=d.me, cur=d.drops.current;
+  $("#hdrName").textContent=me.name||"Dost";
+  var hA=$("#hdrAv"); hA.textContent=""; var photo=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.photo_url;
+  var av=avatar(me.name,44,photo); hA.style.background=av.style.background; hA.style.fontSize=av.style.fontSize; hA.textContent=av.textContent; if(photo){var im=new Image();im.onload=function(){hA.textContent="";hA.appendChild(im);};im.src=photo;}
+  var live=cur&&cur.status==="live"; $("#hdrLive").hidden=!live;
+  var nd=$("#navDrops"); nd.classList.toggle("hot",!!cur); var old=$(".dot",nd); if(old)old.remove(); if(live) nd.appendChild(el("span","dot"));
+  renderHome(d); renderEntries(d); renderDrops(d); renderWinners(d); renderBoard(d); renderMe(d);
+  tick();
+}
+
+function cdBoxes(iso){
+  var w=el("div","cd"); w.setAttribute("data-cd",iso);
+  [["h","Ghante"],["m","Minute"],["s","Second"]].forEach(function(x){var b=el("div"); b.appendChild(el("b",null,"00")).className="cd-"+x[0]; b.appendChild(el("span",null,x[1])); w.appendChild(b);});
+  return w;
+}
+function cdInline(iso){var s=el("b",null,"--:--"); s.setAttribute("data-cdt",iso); return s;}
+function two(n){return (n<10?"0":"")+n;}
+function tick(){
+  var t=now();
+  document.querySelectorAll("[data-cd]").forEach(function(w){
+    var iso=w.getAttribute("data-cd"), rem=Math.max(0,Math.floor((new Date(iso).getTime()-t)/1000));
+    var h=Math.floor(rem/3600), m=Math.floor(rem%3600/60), s=rem%60;
+    $(".cd-h",w).textContent=two(h); $(".cd-m",w).textContent=two(m); $(".cd-s",w).textContent=two(s);
+    if(rem===0&&!S.fired[iso]){S.fired[iso]=1;burst();}
   });
-  $("#yr").textContent = new Date().getFullYear();
+  document.querySelectorAll("[data-cdt]").forEach(function(s){
+    var iso=s.getAttribute("data-cdt"), rem=Math.max(0,Math.floor((new Date(iso).getTime()-t)/1000));
+    var h=Math.floor(rem/3600), m=Math.floor(rem%3600/60), x=rem%60;
+    s.textContent=(h?h+":"+two(m):two(m))+":"+two(x);
+    if(rem===0&&!S.fired[iso]){S.fired[iso]=1;burst();}
+  });
+}
+setInterval(tick,250);
 
-  /* ---- helpers ---- */
-  function ago(iso){
-    if(!iso) return "";
-    var s=Math.max(1,(Date.now()-new Date(iso).getTime())/1000);
-    if(s<60) return "abhi abhi";
-    if(s<3600) return Math.floor(s/60)+" min pehle";
-    if(s<86400) return Math.floor(s/3600)+" ghante pehle";
-    return Math.floor(s/86400)+" din pehle";
+function renderHome(d){
+  var b=$("#t-home"); b.textContent=""; var me=d.me, g=d.giveaway, cur=d.drops.current;
+
+  if(!me.registered||!me.verified){
+    var n=card("notice"); n.appendChild(el("h3",null,!me.registered?"⚠️ Pehle bot start karein":"🛡 Verification baaki hai"));
+    n.appendChild(el("p",null,"Bot me Verify Now dabayein — fir Enter Code, Daily Bonus aur Drops sab unlock ho jayenge."));
+    var w=el("div","mt"); w.appendChild(B("🤖 Bot kholo","gold",openBot)); n.appendChild(w); b.appendChild(n);
   }
-  function countUp(el,to){
-    var from=parseInt(el.getAttribute("data-n")||"0",10); to=+to||0;
-    el.setAttribute("data-n",to);
-    if(from===to||window.matchMedia("(prefers-reduced-motion: reduce)").matches){el.textContent=to.toLocaleString("en-IN");return;}
-    var t0=performance.now(),d=900;
-    (function step(t){var p=Math.min(1,(t-t0)/d),e=1-Math.pow(1-p,3);el.textContent=Math.round(from+(to-from)*e).toLocaleString("en-IN");if(p<1)requestAnimationFrame(step);})(t0);
+
+  var hero=card("hero"); var top=el("div","flex sp");
+  top.appendChild(el("h3",null,"🎁 Live Giveaway"));
+  top.appendChild(el("span","pill "+(g.active?"ok":g.closing?"warn":"bad"),g.active?"LIVE":g.closing?"WINNER DECLARE HO RAHA":"NEXT SOON"));
+  hero.appendChild(top);
+  var r=el("div","row2 mt");
+  var s1=el("div","stat"); s1.appendChild(el("b",null,num(g.entries))); s1.appendChild(el("span",null,"Total Entries"));
+  var s2=el("div","stat"); s2.appendChild(el("b",null,me.entered?num(me.tickets):"—")); s2.appendChild(el("span",null,me.entered?"Aapke Tickets 🎟":"Entry baaki"));
+  r.appendChild(s1); r.appendChild(s2); hero.appendChild(r);
+  var cta=el("div","mt");
+  if(me.entered) cta.appendChild(el("p",null,"✅ Entry confirm! Tickets badhane ke liye refer karein aur daily bonus lein."));
+  else if(g.active) cta.appendChild(B("🔑 Enter Code (Bot me)","gold",openBot));
+  else cta.appendChild(el("p",null,"Naya giveaway shuru hone par channel par notification aayega 🔔"));
+  hero.appendChild(cta); b.appendChild(hero);
+
+  if(cur){
+    var dc=card(cur.status==="live"?"hero":""); var t=el("div","flex sp");
+    t.appendChild(el("h3",null,"⚡ Free Code Drop #"+cur.no)); t.appendChild(el("span","pill "+(cur.status==="live"?"live":"warn"),cur.status==="live"?"LIVE NOW":"SCHEDULED")); dc.appendChild(t);
+    dc.appendChild(el("p",null,cur.label+" · "+cur.total+" codes"));
+    if(cur.status==="scheduled"){var c=el("div","mt flex sp"); c.appendChild(el("span","mut","Live hone me:")); c.appendChild(cdInline(cur.go_live_at)); dc.appendChild(c);}
+    var bw=el("div","mt"); bw.appendChild(B(cur.status==="live"?"🔥 Claim karne jao":"⚡ Drop dekhein",cur.status==="live"?"gold":"vio",function(){go("drops");})); dc.appendChild(bw); b.appendChild(dc);
   }
-  function el(tag,cls,text){var n=document.createElement(tag); if(cls)n.className=cls; if(text!=null)n.textContent=text; return n;}
 
-  /* ---- live stats ---- */
-  function render(d){
-    if(!d||!d.ready) return;
-    var g=d.giveaway||{}, pill=$("#gwPill");
-    if(g.active){pill.textContent="LIVE";pill.className="pill live-on";}
-    else if(g.closing){pill.textContent="WINNER DECLARE HO RAHA HAI";pill.className="pill live-closing";}
-    else{pill.textContent="NEXT GIVEAWAY SOON";pill.className="pill live-off";}
-    countUp($("#gwEntries"),g.entries); countUp($("#stEntries"),g.entries);
-    countUp($("#stUsers"),d.users); countUp($("#stWinners"),d.winners_total);
+  var dl=card(); var dt=el("div","flex sp"); dt.appendChild(el("h3",null,"🎁 Daily Bonus")); dt.appendChild(el("span","pill warn","🔥 "+me.streak+" din")); dl.appendChild(dt);
+  var nxt=MILES.filter(function(x){return x>me.streak;})[0], prev=MILES.filter(function(x){return x<=me.streak;}).pop()||0;
+  if(nxt){var pct=Math.min(100,Math.round((me.streak-prev)/(nxt-prev)*100)); var bar=el("div","bar mt"); var bi=el("i"); bi.style.width=pct+"%"; bar.appendChild(bi); dl.appendChild(bar); dl.appendChild(el("p","mt","Agla ticket reward: "+nxt+" din par ("+(nxt-me.streak)+" din baaki)"));}
+  else dl.appendChild(el("p","mt","🏆 Aapne sabhi streak milestones paar kar liye!"));
+  var db=el("div","mt");
+  var btn=B(me.claimed_today?"✅ Aaj ka bonus le liya":"🎁 Daily Bonus Claim","gold",claimDaily);
+  if(!me.verified||me.claimed_today) btn.disabled=true; db.appendChild(btn); dl.appendChild(db); b.appendChild(dl);
 
-    var tk=$("#ticker"); tk.textContent="";
-    (d.recent_entries||[]).forEach(function(e){var r=el("div"); r.appendChild(el("span",null,"🎟 "+e.name+" ne entry li")); r.appendChild(el("span",null,ago(e.at))); tk.appendChild(r);});
+  var tr=el("div","row3"); [["Users",d.totals.users],["Winners",d.totals.winners],["Referrals",me.refs||0]].forEach(function(x){var s=el("div","stat"); s.appendChild(el("b",null,num(x[1]))); s.appendChild(el("span",null,x[0])); tr.appendChild(s);}); b.appendChild(tr);
+}
 
-    var wl=$("#winnerList"); wl.textContent="";
-    if(!(d.recent_winners||[]).length){wl.appendChild(el("div","empty","Pehla winner jaldi hi yahan dikhega 🏆"));}
-    (d.recent_winners||[]).forEach(function(w){
-      var c=el("div","glass winner reveal in"); c.appendChild(el("div","avatar","🏆"));
-      var b=el("div"); b.appendChild(el("h4",null,w.name+" jeet gaya!")); b.appendChild(el("small",null,(w.no?"Giveaway #"+w.no+" · ":"")+ago(w.at))); c.appendChild(b); wl.appendChild(c);
+function renderEntries(d){
+  var b=$("#t-entries"); var keep=$("#q",b); var val=keep?keep.value:S.search; b.textContent="";
+  var h=el("div","h2"); h.appendChild(el("span",null,"🎟 Live Entries")); h.appendChild(el("small",null,num(d.entries_total)+" total")); b.appendChild(h);
+  var q=el("input","search"); q.id="q"; q.placeholder="🔍 Naam search karein"; q.value=val; q.autocomplete="off"; b.appendChild(q);
+  var list=el("div"); b.appendChild(list);
+  function draw(){
+    S.search=q.value.trim().toLowerCase(); list.textContent="";
+    var rows=d.entries.filter(function(e){return !S.search||e.name.toLowerCase().indexOf(S.search)>-1;});
+    if(!rows.length){list.appendChild(empty(d.entries.length?"Koi match nahi mila":"Abhi koi entry nahi — pehle aap bano! 🚀"));return;}
+    rows.forEach(function(e){
+      var it=el("div","item"+(e.me?" me":"")); it.appendChild(avatar(e.name,40));
+      var nm=el("div","nm"); nm.appendChild(el("b",null,e.name+(e.me?" (Aap)":""))); nm.appendChild(el("small",null,ago(e.at))); it.appendChild(nm);
+      it.appendChild(el("span","chip","🎟 "+e.tickets)); list.appendChild(it);
     });
+    if(d.entries_total>d.entries.length&&!S.search) list.appendChild(el("p","mut",Math.max(0,d.entries_total-d.entries.length)+" aur entries (latest 100 dikh rahi hain)")).style.textAlign="center";
+  }
+  q.addEventListener("input",draw); draw();
+}
 
-    var bd=$("#board"); bd.textContent="";
-    if(!(d.top_referrers||[]).length){bd.appendChild(el("div","empty","Abhi koi referral nahi — pehle aap bano champion! 🚀"));}
-    var medals=["🥇","🥈","🥉","4","5"];
-    (d.top_referrers||[]).forEach(function(u,i){var r=el("div","row"); r.appendChild(el("span","rk",medals[i]||String(i+1))); r.appendChild(el("span","nm",u.name)); r.appendChild(el("span","ct",u.refs+" refs")); bd.appendChild(r);});
+function wallList(wall,limit){
+  var w=el("div"); if(!wall.length){w.appendChild(empty("Abhi koi claim nahi — pehle aap bano! 🚀"));return w;}
+  var medals=["🥇","🥈","🥉"];
+  wall.slice(0,limit||50).forEach(function(c){
+    var it=el("div","item"+(c.me?" me":"")); it.appendChild(el("span","rk",c.rank<=3?medals[c.rank-1]:String(c.rank)));
+    var nm=el("div","nm"); nm.appendChild(el("b",null,c.name+(c.me?" (Aap)":""))); it.appendChild(nm); it.appendChild(el("span","chip","⚡ "+sec(c.ms))); w.appendChild(it);
+  });
+  return w;
+}
 
-    var sl=$("#sponsorList"); sl.textContent="";
-    (d.sponsors||[]).forEach(function(s){
-      var c=el("div","glass sponsor reveal in"), top=el("div","sp-top");
-      top.appendChild(el("div","sp-logo",(s.title||"S").trim().charAt(0).toUpperCase()));
-      var b=el("div"); b.appendChild(el("h4",null,s.title)); b.appendChild(el("small",null,"Partner channel")); top.appendChild(b); c.appendChild(top);
-      var a=el("a","btn btn-ghost btn-sm","Join Channel"); a.href=safeUrl(s.link); a.setAttribute("data-tg","");
-      a.addEventListener("click",function(e){if(inTG&&/^https?:\/\/t\.me\//i.test(a.href)){e.preventDefault();tg.openTelegramLink(a.href);}else{a.target="_blank";a.rel="noopener";}});
-      c.appendChild(a); sl.appendChild(c);
+function renderDrops(d){
+  var b=$("#t-drops"); b.textContent=""; var cur=d.drops.current, me=d.me;
+  var h=el("div","h2"); h.appendChild(el("span",null,"⚡ Free Code Drops")); b.appendChild(h);
+
+  if(!cur){
+    var c=card(); c.appendChild(el("h3",null,"Abhi koi drop nahi")); c.appendChild(el("p",null,"Admin kabhi bhi free redeem code drop karta hai. Channel ke notification ON rakhein 🔔 — drop se pehle teaser aata hai, tab Google Play Store ka Redeem screen kholkar ready baith jao!"));
+    b.appendChild(c);
+  } else if(cur.status==="scheduled"){
+    var c1=card("hero"); var t=el("div","flex sp"); t.appendChild(el("h3",null,"Drop #"+cur.no)); t.appendChild(el("span","pill warn","SCHEDULED")); c1.appendChild(t);
+    c1.appendChild(el("p",null,"🎁 "+cur.label+" · sirf "+cur.total+" logon ke liye"));
+    c1.appendChild(cdBoxes(cur.go_live_at)); var lt=el("p",null,"Live hoga: "+istTime(cur.go_live_at)+" (IST)"); lt.style.textAlign="center"; c1.appendChild(lt);
+    b.appendChild(c1);
+    var tip=card("notice"); tip.appendChild(el("h3",null,"📲 Ready ho jao!")); tip.appendChild(el("p",null,"Abhi Google Play Store kholo → Menu → Payments → Redeem code screen par ruko. Drop live hote hi CLAIM dabao — sabse pehle wale ko code milega."));
+    b.appendChild(tip);
+    var rb=B(cur.reminded?"✅ Reminder ON hai":"🔔 Mujhe yaad dilao (DM)","vio",function(btn){btn.disabled=true;api("/api/remind",{drop:cur.no}).then(function(r){toast(r.status==="ok"?"🔔 Reminder set! Drop se pehle DM aayega":r.status==="already"?"Reminder pehle se ON hai":r.status==="unregistered"?"Pehle bot start karein":"Reminder nahi lag paya");load();});});
+    if(cur.reminded) rb.disabled=true; b.appendChild(rb); b.lastChild.style.marginBottom="14px";
+  } else {
+    var mine=(me.my_claims||[]).filter(function(x){return x.drop===cur.no;})[0];
+    var c2=card("hero"); var t2=el("div","flex sp"); t2.appendChild(el("h3",null,"🔥 DROP LIVE — Drop #"+cur.no)); t2.appendChild(el("span","pill live","LIVE")); c2.appendChild(t2);
+    c2.appendChild(el("p",null,"🎁 "+cur.label));
+    var pr=el("div","mt flex sp"); pr.appendChild(el("span","mut","Claimed")); pr.appendChild(el("b",null,cur.claimed+" / "+cur.total)); c2.appendChild(pr);
+    var bar=el("div","bar mt"); var bi=el("i"); bi.style.width=Math.min(100,Math.round(cur.claimed/Math.max(1,cur.total)*100))+"%"; bar.appendChild(bi); c2.appendChild(bar);
+    var act=el("div","mt");
+    if(mine){ act.appendChild(el("p",null,"✅ Aapne claim kar liya! Rank #"+mine.rank+" · "+sec(mine.ms)));
+      var cd=el("div","code"); cd.appendChild(el("code",null,mine.code||"")); cd.appendChild(B("📋","sm",function(){copy(mine.code,"✅ Code copy ho gaya");})); act.appendChild(cd);
+    } else if(cur.claimed>=cur.total){ act.appendChild(el("p",null,"😔 Saare codes claim ho chuke hain."));
+    } else if(!me.verified){ act.appendChild(B("🛡 Pehle bot me Verify karein","gold",openBot));
+    } else { var cb=el("button","claim","🎁 CLAIM NOW"); cb.addEventListener("click",function(){claimDrop(cur.no,cb);}); act.appendChild(cb); }
+    c2.appendChild(act); b.appendChild(c2);
+    var wh=el("div","h2"); wh.appendChild(el("span",null,"🏁 Claim Wall")); b.appendChild(wh); b.appendChild(wallList(cur.wall));
+  }
+
+  if(d.drops.history.length){
+    var hh=el("div","h2"); hh.appendChild(el("span",null,"📜 Pichhle Drops")); b.appendChild(hh);
+    d.drops.history.forEach(function(h2){
+      var c3=card(); var tt=el("div","flex sp"); tt.appendChild(el("h3",null,"Drop #"+h2.no+" · "+h2.label)); tt.appendChild(el("span","pill ok",h2.claimed+"/"+h2.total)); c3.appendChild(tt);
+      c3.appendChild(el("p",null,(h2.ended_at?ago(h2.ended_at)+" · ":"")+(h2.end_reason==="sold_out"?"Sab codes claim ho gaye":"Drop khatam")));
+      c3.appendChild(wallList(h2.wall,3)).style.marginTop="10px"; b.appendChild(c3);
     });
-    var cta=el("div","glass sponsor sp-cta reveal in"); cta.appendChild(el("h4",null,"Aap bhi sponsor bano 🚀"));
-    cta.appendChild(el("small",null,"Apne channel ke verified members badhao."));
-    var sa=el("a","btn btn-gold btn-sm","Contact "+(cfg.support_username||"Admin")); sa.href=safeUrl(cfg.support_link); sa.target="_blank"; sa.rel="noopener"; cta.appendChild(sa); sl.appendChild(cta);
   }
-  function loadStats(){fetch("/api/stats",{cache:"no-store"}).then(function(r){return r.json()}).then(render).catch(function(){});}
-  loadStats(); setInterval(loadStats,30000);
+}
 
-  /* ---- Mini App dashboard ---- */
-  if(inTG){
-    try{tg.ready();tg.expand();tg.setHeaderColor&&tg.setHeaderColor("#0a0e1f");tg.setBackgroundColor&&tg.setBackgroundColor("#0a0e1f");}catch(e){}
-    fetch("/api/me",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:tg.initData})})
-      .then(function(r){return r.json()}).then(function(m){
-        if(m.error) return;
-        $("#me").style.display="block";
-        var link=m.ref_link||""; $("#refInput").value=link;
-        $("#copyBtn").onclick=function(){
-          var done=function(){var b=$("#copyBtn");b.textContent="✅ Copied";setTimeout(function(){b.textContent="📋 Copy"},1600)};
-          if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(link).then(done,function(){$("#refInput").select();document.execCommand("copy");done()});}
-          else{$("#refInput").select();document.execCommand("copy");done();}
-        };
-        $("#shareBtn").onclick=function(){tg.openTelegramLink("https://t.me/share/url?url="+encodeURIComponent(link)+"&text="+encodeURIComponent("🎁 Free redeem codes jeeto! Is bot ko join karo:"));};
-        var note=$("#meNote");
-        if(!m.registered){$("#meName").textContent="Aapka";$("#meBadge").textContent="Bot start karein";$("#meBadge").className="pill live-closing";note.textContent="Pehle bot me /start dabayein, phir yahan apna dashboard dekhein.";return;}
-        $("#meName").textContent=(m.name||"Aapka")+" ka";
-        $("#meTickets").textContent=m.tickets; $("#meStreak").textContent=m.streak; $("#meRefs").textContent=m.refs; $("#meRank").textContent=m.rank?("#"+m.rank):"—";
-        var b=$("#meBadge"); if(m.verified){b.textContent="Verified ✓";b.className="pill live-on";}else{b.textContent="Verify baaki";b.className="pill live-closing";}
-        var msg;
-        if(!m.verified) msg="🛡 Bot me “Verify Now” dabakar 1-tap verification poora karein.";
-        else if(m.entered) msg="✅ Aapki entry confirm hai! Ab dosto ko refer karke tickets badhayein.";
-        else msg="🔑 Abhi entry baaki hai — bot me “Enter Code” dabakar code bhejein.";
-        if(m.verified&&!m.claimed_today) msg+=" 🎁 Aaj ka Daily Bonus abhi claim karein!";
-        note.textContent=msg;
-      }).catch(function(){});
+function renderWinners(d){
+  var b=$("#t-winners"); b.textContent="";
+  var h=el("div","h2"); h.appendChild(el("span",null,"🏆 Winners")); h.appendChild(el("small",null,num(d.totals.winners)+" declared")); b.appendChild(h);
+  if(!d.winners.length){b.appendChild(empty("Pehla winner jaldi hi yahan dikhega 🏆"));return;}
+  d.winners.forEach(function(w){
+    var it=el("div","item"+(w.me?" me":"")); it.appendChild(avatar("🏆",44)); it.lastChild.style.background="linear-gradient(135deg,var(--gold),var(--pink))";
+    var nm=el("div","nm"); nm.appendChild(el("b",null,w.name+(w.me?" (Aap) 🎉":""))); nm.appendChild(el("small",null,(w.no?"Giveaway #"+w.no+" · ":"")+ago(w.at)+" · "+num(w.entries)+" entries")); it.appendChild(nm);
+    it.appendChild(el("span","chip","🏆")); b.appendChild(it);
+  });
+}
+
+function renderBoard(d){
+  var b=$("#t-board"); b.textContent="";
+  var h=el("div","h2"); h.appendChild(el("span",null,"🏅 Leaderboard")); b.appendChild(h);
+  var seg=el("div","seg"); [["refs","👥 Referrers"],["streaks","🔥 Streaks"]].forEach(function(x){var bt=el("button",S.board===x[0]?"on":"",x[1]); bt.addEventListener("click",function(){S.board=x[0];haptic();renderBoard(d);}); seg.appendChild(bt);}); b.appendChild(seg);
+  var rows=d.board[S.board]; var unit=S.board==="refs"?"referrals":"din";
+  if(!rows.length){b.appendChild(empty(S.board==="refs"?"Abhi koi referral nahi — pehle aap bano champion! 🚀":"Abhi kisi ki streak nahi — Daily Bonus se shuru karein 🔥"));return;}
+  var order=[1,0,2], heights=[70,100,52], medals=["🥈","🥇","🥉"];
+  var pod=el("div","podium");
+  order.forEach(function(i,k){var r=rows[i]; if(!r) return; var p=el("div","pod"); p.appendChild(avatar(r.name,i===0?58:46)); p.appendChild(el("b",null,r.name+(r.me?" ★":""))); p.appendChild(el("small",null,r.count+" "+unit)); var st=el("div","step",medals[k]); st.style.height=heights[k]+"px"; p.appendChild(st); pod.appendChild(p);});
+  b.appendChild(pod);
+  rows.slice(3).forEach(function(r,i){var it=el("div","item"+(r.me?" me":"")); it.appendChild(el("span","rk",String(i+4))); it.appendChild(avatar(r.name,36)); var nm=el("div","nm"); nm.appendChild(el("b",null,r.name+(r.me?" (Aap)":""))); it.appendChild(nm); it.appendChild(el("span","chip",r.count+" "+unit)); b.appendChild(it);});
+  var mine=S.board==="refs"?d.me.rank_refs:d.me.rank_streak;
+  var yc=card(); yc.appendChild(el("p",null,mine?"📍 Aapka rank: #"+mine:"📍 Aap abhi list me nahi hain — "+(S.board==="refs"?"Profile se referral link share karein!":"Daily Bonus claim karke streak banayein!"))); b.appendChild(yc);
+}
+
+function renderMe(d){
+  var b=$("#t-me"); b.textContent=""; var me=d.me;
+  var pc=card("hero"); var fl=el("div","flex"); fl.appendChild(avatar(me.name,58,tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.photo_url));
+  var nm=el("div"); nm.style.flex="1"; nm.appendChild(el("h3",null,me.name||"Dost")); nm.appendChild(el("span","pill "+(me.verified?"ok":"warn"),me.verified?"✓ Verified":"Verify baaki")); fl.appendChild(nm); pc.appendChild(fl);
+  var g=el("div","row3 mt"); [["🎟 Tickets",me.tickets||0],["🔥 Streak",me.streak||0],["👥 Referrals",me.refs||0]].forEach(function(x){var s=el("div","stat"); s.appendChild(el("b",null,num(x[1]))); s.appendChild(el("span",null,x[0])); g.appendChild(s);}); pc.appendChild(g); b.appendChild(pc);
+
+  var rc=card(); rc.appendChild(el("h3",null,"👥 Refer & Earn")); rc.appendChild(el("p",null,"Har dost jo aapke link se aakar verify karega = +1 ticket. Zyada tickets = zyada winning chance!"));
+  var rl=el("div","code"); rl.appendChild(el("code",null,me.ref_link||"")); rc.appendChild(rl);
+  var br=el("div","row2 mt"); br.appendChild(B("📋 Copy Link","",function(){copy(me.ref_link,"✅ Referral link copy ho gaya");}));
+  br.appendChild(B("📤 Share","gold",function(){openLink("https://t.me/share/url?url="+encodeURIComponent(me.ref_link)+"&text="+encodeURIComponent("🎁 Free redeem codes jeeto! Is bot ko join karo:"));})); rc.appendChild(br); b.appendChild(rc);
+
+  var mc=card(); mc.appendChild(el("h3",null,"🎁 Mere Claimed Codes"));
+  if(!(me.my_claims||[]).length) mc.appendChild(el("p",null,"Abhi koi drop claim nahi kiya. Drops tab me live drop ka wait karein ⚡"));
+  (me.my_claims||[]).forEach(function(c){var it=el("div","code"); var w=el("div"); w.style.flex="1"; w.appendChild(el("small","mut","Drop #"+c.drop+" · #"+c.rank+" · "+ago(c.at))); w.appendChild(el("code",null,c.code||"")).style.display="block"; it.appendChild(w); it.appendChild(B("📋","sm",function(){copy(c.code,"✅ Code copy ho gaya");})); mc.appendChild(it);}); b.appendChild(mc);
+
+  if(d.sponsors.length){var sc=card(); sc.appendChild(el("h3",null,"🤝 Sponsors")); sc.appendChild(el("p",null,"Inhe join karke aap hamein support karte ho 💛"));
+    d.sponsors.forEach(function(s){var it=el("div","item"); it.style.marginTop="10px"; it.appendChild(avatar(s.title,38)); var n2=el("div","nm"); n2.appendChild(el("b",null,s.title)); n2.appendChild(el("small",null,"Partner channel")); it.appendChild(n2); it.appendChild(B("Join","sm",function(){openLink(s.link);})); sc.appendChild(it);}); b.appendChild(sc);}
+
+  var hc=card(); hc.appendChild(el("h3",null,"ℹ️ Madad & FAQ"));
+  [["Kya sach me free hai?","Haan, 100% free. Yahan kabhi paise nahi maange jaate."],
+   ["Drop me code kaise milta hai?","Drop live hote hi CLAIM dabao. Sabse pehle tap karne walon ko code milta hai aur claim wall par naam aata hai."],
+   ["Tickets kaise badhein?","Dost ko refer karo (+1) aur Daily Bonus streak banao (3/7/14/30 din par extra)."]
+  ].forEach(function(f){var dt=el("details","faq card"); var sm=el("summary",null,f[0]); dt.appendChild(sm); dt.appendChild(el("p",null,f[1])); hc.appendChild(dt);});
+  var bb=el("div","row2 mt"); bb.appendChild(B("📢 Channel","",function(){openLink(cfg.channel_link);})); bb.appendChild(B("🆘 "+(cfg.support_username||"Support"),"",function(){openLink(cfg.support_link);})); hc.appendChild(bb); b.appendChild(hc);
+}
+
+/* ------------------------------------------------ actions */
+function showCode(r){
+  var bg=el("div","sheet-bg"); var sh=el("div","sheet");
+  sh.appendChild(el("div",null,"🎉")).style.fontSize="3rem";
+  sh.appendChild(el("h3",null,"Mubarak ho! Rank #"+r.rank)); sh.appendChild(el("p","mut","⚡ "+sec(r.ms)+" me claim kiya"));
+  var cd=el("div","code"); cd.appendChild(el("code",null,r.code)); sh.appendChild(cd);
+  var rw=el("div","row2 mt"); rw.appendChild(B("📋 Copy Code","gold",function(){copy(r.code,"✅ Code copy ho gaya");})); rw.appendChild(B("Close","",function(){bg.remove();})); sh.appendChild(rw);
+  sh.appendChild(el("p","mut mt","Code DM me bhi bheja gaya hai. Jaldi Google Play me redeem karein!")).style.fontSize=".8rem";
+  bg.appendChild(sh); bg.addEventListener("click",function(e){if(e.target===bg)bg.remove();}); document.body.appendChild(bg);
+}
+function claimDrop(no,btn){
+  btn.disabled=true; haptic("heavy");
+  api("/api/claim",{drop:no}).then(function(r){
+    var m={not_live:"⏳ Drop abhi live nahi hua",ended:"❌ Drop khatam ho chuka hai",sold_out:"😔 Saare codes claim ho chuke",unverified:"🛡 Pehle bot me Verify karein",not_found:"Drop nahi mila"};
+    if(r.status==="ok"||r.status==="duplicate"){ if(r.code){showCode(r);} notify("success"); if(r.status==="ok")confetti(); else toast("✅ Aap pehle hi claim kar chuke ho"); }
+    else { toast(m[r.status]||"Kuch gadbad hui, dobara try karein"); notify("error"); }
+    load();
+  }).catch(function(){toast("Network error");btn.disabled=false;});
+}
+function claimDaily(btn){
+  btn.disabled=true;
+  api("/api/daily").then(function(r){
+    if(r.status==="ok"){notify("success");confetti();toast("🎁 Streak "+r.streak+" din!"+(r.reward?" +"+r.reward+" ticket 🎟":""));}
+    else if(r.status==="already") toast("✅ Aaj ka bonus pehle hi le liya");
+    else if(r.status==="unverified") toast("🛡 Pehle bot me Verify karein");
+    else toast("Kuch gadbad hui");
+    load();
+  }).catch(function(){toast("Network error");btn.disabled=false;});
+}
+
+/* ------------------------------------------------ confetti */
+function confetti(){
+  if(window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  var c=$("#fx"),x=c.getContext("2d"); c.width=innerWidth; c.height=innerHeight;
+  var P=[],cols=["#ffc83d","#ff4d8d","#7c5cff","#22d3ee","#34d399"];
+  for(var i=0;i<90;i++)P.push({x:innerWidth/2,y:innerHeight*.55,vx:(Math.random()-.5)*14,vy:-Math.random()*15-4,s:Math.random()*7+4,c:cols[i%5],r:Math.random()*6,vr:(Math.random()-.5)*.4});
+  var f=0;(function a(){x.clearRect(0,0,c.width,c.height);P.forEach(function(p){p.vy+=.45;p.x+=p.vx;p.y+=p.vy;p.r+=p.vr;x.save();x.translate(p.x,p.y);x.rotate(p.r);x.fillStyle=p.c;x.fillRect(-p.s/2,-p.s/2,p.s,p.s*.6);x.restore();});if(++f<110)requestAnimationFrame(a);else x.clearRect(0,0,c.width,c.height);})();
+}
+
+/* ------------------------------------------------ boot */
+function boot(){
+  if(!inTG){
+    $("#gate").hidden=false; var g=$("#gateBtn"); g.href=safeUrl(cfg.bot_link||("https://t.me/"+cfg.bot_username)); g.target="_blank"; g.rel="noopener"; return;
   }
-
-  /* ---- scroll reveal ---- */
-  var io=("IntersectionObserver" in window)?new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add("in");io.unobserve(e.target);}})},{threshold:.12}):null;
-  document.querySelectorAll(".reveal").forEach(function(n){io?io.observe(n):n.classList.add("in");});
+  try{
+    tg.ready(); tg.expand(); if(tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+    var light=tg.colorScheme==="light"; document.documentElement.setAttribute("data-theme",light?"light":"dark");
+    var col=light?"#f2f4ff":"#0b0f1f"; if(tg.setHeaderColor) tg.setHeaderColor(col); if(tg.setBackgroundColor) tg.setBackgroundColor(col); if(tg.setBottomBarColor) tg.setBottomBarColor(col);
+  }catch(e){}
+  $("#app").hidden=false;
+  var u=tg.initDataUnsafe&&tg.initDataUnsafe.user; if(u){$("#hdrName").textContent=u.first_name||"Dost";}
+  loop();
+  document.addEventListener("visibilitychange",function(){if(!document.hidden)load();});
+}
+boot();
 })();
 </script>
 </body>
