@@ -14,14 +14,14 @@
 :root{
   --bg:#0b0f1f; --surface:rgba(255,255,255,.06); --surface2:rgba(255,255,255,.1); --line:rgba(255,255,255,.1);
   --text:#eef1ff; --muted:#98a2cc; --gold:#ffc83d; --gold2:#ff9a1f; --vio:#7c5cff; --cy:#22d3ee;
-  --pink:#ff4d8d; --ok:#34d399; --warn:#fbbf24; --bad:#fb7185; --red:#ff4545;
+  --pink:#ff4d8d; --ok:#34d399; --warn:#fbbf24; --bad:#fb7185; --red:#ff4545; --link:#5eb5ff;
   --shadow:0 10px 30px rgba(0,0,0,.35); --r:20px; --nav:74px;
   --top:max(env(safe-area-inset-top,0px),var(--tg-content-safe-area-inset-top,0px));
   --bot:env(safe-area-inset-bottom,0px);
 }
 html[data-theme="light"]{
   --bg:#f2f4ff; --surface:#ffffff; --surface2:#eceffd; --line:rgba(20,30,80,.1);
-  --text:#141a3a; --muted:#5d678f; --shadow:0 8px 24px rgba(40,50,120,.12);
+  --text:#141a3a; --muted:#5d678f; --link:#1a73e8; --shadow:0 8px 24px rgba(40,50,120,.12);
 }
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 html{-webkit-text-size-adjust:100%}
@@ -34,8 +34,8 @@ button{font-family:inherit;cursor:pointer;border:0;color:inherit;background:none
 input{font-family:inherit}
 [hidden]{display:none!important}
 .mut{color:var(--muted)}
+.nlink{color:var(--link);text-decoration:none}
 
-/* layout */
 header.top{position:sticky;top:0;z-index:30;display:flex;align-items:center;gap:12px;padding:calc(var(--top) + 12px) 16px 12px;background:linear-gradient(var(--bg) 70%,transparent)}
 .av{flex:none;display:grid;place-items:center;border-radius:50%;font-weight:800;color:#fff;overflow:hidden;text-transform:uppercase}
 .av img{width:100%;height:100%;object-fit:cover}
@@ -52,7 +52,11 @@ main{padding:4px 16px calc(var(--nav) + var(--bot) + 28px);max-width:640px;margi
 .h2{font-size:1.25rem;font-weight:800;margin:6px 2px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
 .h2 small{font-size:.76rem;font-weight:600;color:var(--muted)}
 
-/* cards */
+#banners{max-width:640px;margin:0 auto;padding:0 16px}
+.banner{padding:12px 14px;border-radius:14px;margin-bottom:10px;font-size:.86rem;font-weight:600;display:flex;gap:10px;align-items:flex-start}
+.banner.info{background:rgba(94,181,255,.14);border:1px solid rgba(94,181,255,.4)}
+.banner.bad{background:rgba(251,113,133,.15);border:1px solid rgba(251,113,133,.45)}
+
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:18px;margin-bottom:14px;box-shadow:var(--shadow);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px)}
 .card h3{font-size:1rem;margin-bottom:4px}
 .card p{font-size:.88rem;color:var(--muted)}
@@ -68,12 +72,10 @@ main{padding:4px 16px calc(var(--nav) + var(--bot) + 28px);max-width:640px;margi
 .pill.bad{background:rgba(251,113,133,.16);color:var(--bad)}
 .pill.live{background:rgba(255,69,69,.16);color:var(--red)}
 .notice{border-color:rgba(251,191,36,.45);background:rgba(251,191,36,.1)}
-.notice b{color:var(--warn)}
 .flex{display:flex;align-items:center;gap:10px}
 .sp{justify-content:space-between}
 .mt{margin-top:12px}
 
-/* buttons */
 .btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:13px 18px;border-radius:14px;font-weight:700;font-size:.95rem;background:var(--surface2);border:1px solid var(--line);transition:transform .15s,opacity .15s}
 .btn:active{transform:scale(.97)}
 .btn[disabled]{opacity:.5;pointer-events:none}
@@ -81,24 +83,19 @@ main{padding:4px 16px calc(var(--nav) + var(--bot) + 28px);max-width:640px;margi
 .btn.vio{background:linear-gradient(135deg,var(--vio),var(--pink));color:#fff;border:0}
 .btn.sm{width:auto;padding:9px 16px;font-size:.84rem;border-radius:11px}
 .claim{position:relative;width:100%;padding:22px 16px;border-radius:22px;font-size:1.35rem;font-weight:800;letter-spacing:.02em;color:#fff;background:linear-gradient(135deg,#ff4545,#ff8a1f);box-shadow:0 12px 36px rgba(255,69,69,.5);animation:ring 1.4s infinite}
+.claim.lucky{background:linear-gradient(135deg,#7c5cff,#ff4d8d)}
 .claim:active{transform:scale(.96)}
 .claim[disabled]{animation:none;opacity:.6}
 @keyframes ring{0%{box-shadow:0 0 0 0 rgba(255,100,60,.6),0 12px 36px rgba(255,69,69,.5)}100%{box-shadow:0 0 0 22px rgba(255,100,60,0),0 12px 36px rgba(255,69,69,.5)}}
 
-/* progress */
 .bar{height:10px;border-radius:99px;background:var(--surface2);overflow:hidden}
 .bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--gold),var(--pink));transition:width .5s}
-.dots{display:flex;gap:6px;margin:10px 0}
-.dots span{flex:1;height:8px;border-radius:99px;background:var(--surface2)}
-.dots span.on{background:linear-gradient(90deg,var(--gold),var(--gold2))}
 
-/* countdown */
 .cd{display:flex;gap:10px;justify-content:center;margin:14px 0}
 .cd div{min-width:72px;padding:12px 6px;border-radius:16px;background:var(--surface2);text-align:center}
 .cd b{display:block;font-size:2rem;font-weight:800;line-height:1.1;font-variant-numeric:tabular-nums}
 .cd span{font-size:.66rem;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
 
-/* lists */
 .item{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:15px;background:var(--surface);border:1px solid var(--line);margin-bottom:8px}
 .item.me{border-color:var(--gold);background:rgba(255,200,61,.1)}
 .item .nm{flex:1;min-width:0}
@@ -109,7 +106,7 @@ main{padding:4px 16px calc(var(--nav) + var(--bot) + 28px);max-width:640px;margi
 .search{width:100%;padding:12px 16px;border-radius:14px;border:1px solid var(--line);background:var(--surface);color:var(--text);font-size:.92rem;margin-bottom:12px;user-select:text;-webkit-user-select:text}
 .empty{padding:28px 16px;text-align:center;color:var(--muted);font-size:.9rem;border:1px dashed var(--line);border-radius:var(--r);margin-bottom:12px}
 .seg{display:flex;padding:4px;border-radius:14px;background:var(--surface2);margin-bottom:14px}
-.seg button{flex:1;padding:10px;border-radius:11px;font-weight:700;font-size:.86rem;color:var(--muted)}
+.seg button{flex:1;padding:10px 4px;border-radius:11px;font-weight:700;font-size:.82rem;color:var(--muted)}
 .seg button.on{background:linear-gradient(135deg,var(--vio),var(--pink));color:#fff}
 .podium{display:flex;align-items:flex-end;justify-content:center;gap:10px;margin:8px 0 18px}
 .pod{flex:1;max-width:110px;text-align:center}
@@ -120,7 +117,17 @@ main{padding:4px 16px calc(var(--nav) + var(--bot) + 28px);max-width:640px;margi
 .code{display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;background:var(--surface2);margin-top:8px}
 .code code{flex:1;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:.95rem;word-break:break-all;user-select:text;-webkit-user-select:text}
 
-/* nav */
+/* reward cards */
+.rcards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rc{position:relative;padding:14px 12px;border-radius:18px;background:var(--surface2);border:1px solid var(--line);text-align:center;overflow:hidden}
+.rc .amt{font-size:1.7rem;font-weight:800;line-height:1.1}
+.rc .req{font-size:.74rem;color:var(--muted);margin:2px 0 8px}
+.rc.ready{background:linear-gradient(135deg,rgba(255,200,61,.28),rgba(255,77,141,.2));border-color:var(--gold)}
+.rc.done{opacity:.8}
+.rc.lock .amt{opacity:.55}
+.rc .tag{font-size:.7rem;font-weight:700;margin-top:6px;display:block}
+.rc .btn{padding:9px 8px;font-size:.8rem;border-radius:10px}
+
 nav.tabs{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--bot) + 10px);width:min(620px,100% - 20px);height:var(--nav);display:flex;justify-content:space-around;align-items:center;padding:6px;border-radius:26px;background:rgba(18,22,48,.82);border:1px solid var(--line);box-shadow:0 14px 40px rgba(0,0,0,.45);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);z-index:40}
 html[data-theme="light"] nav.tabs{background:rgba(255,255,255,.9)}
 nav.tabs button{position:relative;flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 2px;border-radius:18px;font-size:.62rem;font-weight:600;color:var(--muted);transition:.2s}
@@ -130,7 +137,6 @@ nav.tabs button.on i{transform:translateY(-2px) scale(1.12)}
 nav.tabs button.hot i{filter:drop-shadow(0 0 8px var(--gold))}
 nav.tabs button .dot{position:absolute;top:6px;right:calc(50% - 20px);width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 0 3px rgba(255,69,69,.25);animation:pop 1.2s infinite}
 
-/* sheet + toast */
 .sheet-bg{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;animation:fadeBg .25s}
 @keyframes fadeBg{from{opacity:0}}
 .sheet{width:min(640px,100%);background:var(--bg);border:1px solid var(--line);border-radius:26px 26px 0 0;padding:24px 20px calc(var(--bot) + 24px);animation:up .3s;text-align:center}
@@ -140,7 +146,6 @@ nav.tabs button .dot{position:absolute;top:6px;right:calc(50% - 20px);width:10px
 .toast.show{transform:translate(-50%,0);opacity:1}
 canvas#fx{position:fixed;inset:0;z-index:90;pointer-events:none}
 
-/* skeleton + gate */
 .sk{height:96px;border-radius:var(--r);margin-bottom:14px;background:linear-gradient(90deg,var(--surface) 25%,var(--surface2) 50%,var(--surface) 75%);background-size:200% 100%;animation:sh 1.3s infinite}
 @keyframes sh{to{background-position:-200% 0}}
 .gate{min-height:100vh;display:grid;place-items:center;padding:24px;text-align:center}
@@ -161,7 +166,7 @@ details.faq p{margin-top:8px}
   <div class="card">
     <div class="big">🎁</div>
     <h3 style="font-size:1.3rem;margin:6px 0">ASB FreeCodes</h3>
-    <p>Ye ek <b>Telegram Mini App</b> hai. Isse Telegram ke andar bot se kholein — daily bonus, free code drops, leaderboard sab wahin milega.</p>
+    <p>Ye ek <b>Telegram Mini App</b> hai. Isse Telegram ke andar bot se kholein — daily bonus, reward cards, free code drops sab wahin milega.</p>
     <a id="gateBtn" class="btn gold mt" style="text-decoration:none" href="#">🤖 Bot kholo</a>
   </div>
 </div>
@@ -169,26 +174,27 @@ details.faq p{margin-top:8px}
 <div id="app" hidden>
   <header class="top">
     <div class="av" id="hdrAv" style="width:44px;height:44px"></div>
-    <div class="hdr-txt"><small>Namaste 👋</small><b id="hdrName">…</b></div>
+    <div class="hdr-txt"><small id="hdrHi">Namaste 👋</small><b id="hdrName">…</b></div>
     <span class="live-badge" id="hdrLive" hidden>DROP LIVE</span>
   </header>
+  <div id="banners"></div>
 
   <main>
     <section class="tab active" id="t-home"><div class="sk"></div><div class="sk"></div><div class="sk"></div></section>
     <section class="tab" id="t-entries"></section>
     <section class="tab" id="t-drops"></section>
-    <section class="tab" id="t-winners"></section>
-    <section class="tab" id="t-board"></section>
+    <section class="tab" id="t-rewards"></section>
+    <section class="tab" id="t-top"></section>
     <section class="tab" id="t-me"></section>
   </main>
 
   <nav class="tabs" id="nav">
-    <button data-t="home" class="on"><i>🏠</i>Home</button>
-    <button data-t="entries"><i>🎟</i>Entries</button>
-    <button data-t="drops" id="navDrops"><i>⚡</i>Drops</button>
-    <button data-t="winners"><i>🏆</i>Winners</button>
-    <button data-t="board"><i>🏅</i>Board</button>
-    <button data-t="me"><i>👤</i>Profile</button>
+    <button data-t="home" class="on"><i>🏠</i><span data-i="Home">Home</span></button>
+    <button data-t="entries"><i>🎟</i><span data-i="Entries">Entries</span></button>
+    <button data-t="drops" id="navDrops"><i>⚡</i><span data-i="Drops">Drops</span></button>
+    <button data-t="rewards"><i>🎯</i><span data-i="Rewards">Rewards</span></button>
+    <button data-t="top"><i>🏆</i><span data-i="Top">Top</span></button>
+    <button data-t="me"><i>👤</i><span data-i="Profile">Profile</span></button>
   </nav>
 </div>
 
@@ -204,7 +210,61 @@ var tg = window.Telegram && window.Telegram.WebApp;
 var inTG = !!(tg && tg.initData);
 var $ = function(s,r){return (r||document).querySelector(s)};
 var MILES = [3,7,14,30];
-var S = {data:null, tab:"home", offset:0, board:"refs", search:"", loading:false, timer:null, fired:{}};
+var S = {data:null, tab:"home", offset:0, top:"winners", search:"", loading:false, lastLoad:0, fired:{}, v:-1, dropKey:"", queued:{}, lang:"hi"};
+
+/* ------------------------------------------------ language (Hinglish / English) */
+var EN = {
+"Home":"Home","Entries":"Entries","Drops":"Drops","Rewards":"Rewards","Top":"Top","Profile":"Profile",
+"Namaste 👋":"Hello 👋","Aap":"You","Dost":"Friend",
+"⚠️ Pehle bot start karein":"⚠️ Start the bot first","🛡 Verification baaki hai":"🛡 Verification pending",
+"Bot me Verify Now dabayein — fir Enter Code, Daily Bonus, Rewards aur Drops sab unlock ho jayenge.":"Tap Verify Now in the bot — then Enter Code, Daily Bonus, Rewards and Drops unlock.",
+"🤖 Bot kholo":"🤖 Open bot","🎁 Live Giveaway":"🎁 Live Giveaway","LIVE":"LIVE","WINNER DECLARE HO RAHA":"PICKING WINNER","NEXT SOON":"NEXT SOON",
+"Total Entries":"Total Entries","Aapke Tickets 🎟":"Your Tickets 🎟","Entry baaki":"Not entered",
+"✅ Entry confirm! Tickets badhane ke liye refer karein aur daily bonus lein.":"✅ Entry confirmed! Refer friends and claim daily bonus for more tickets.",
+"🔑 Enter Code (Bot me)":"🔑 Enter Code (in bot)","Naya giveaway shuru hone par channel par notification aayega 🔔":"You'll get a channel notification when a new giveaway starts 🔔",
+"Live hone me:":"Starts in:","🔥 Claim karne jao":"🔥 Go claim","⚡ Drop dekhein":"⚡ View drop","SCHEDULED":"SCHEDULED","LIVE NOW":"LIVE NOW",
+"🎁 Daily Bonus":"🎁 Daily Bonus","Agla ticket reward:":"Next ticket reward:","din par":"days","din baaki":"days left","🏆 Aapne sabhi streak milestones paar kar liye!":"🏆 You crossed all streak milestones!",
+"✅ Aaj ka bonus le liya":"✅ Today's bonus claimed","🎁 Daily Bonus Claim":"🎁 Claim Daily Bonus","Users":"Users","Winners":"Winners","Referrals":"Referrals",
+"🎟 Live Entries":"🎟 Live Entries","total":"total","🔍 Naam search karein":"🔍 Search name","Koi match nahi mila":"No match","Abhi koi entry nahi — pehle aap bano! 🚀":"No entries yet — be the first! 🚀",
+"⚡ Free Code Drops":"⚡ Free Code Drops","Abhi koi drop nahi":"No drop right now",
+"Admin kabhi bhi free redeem code drop karta hai. Channel ke notification ON rakhein 🔔 — drop se pehle teaser aata hai, tab Google Play Store ka Redeem screen kholkar ready baith jao!":"The admin drops free redeem codes anytime. Keep channel notifications ON 🔔 — a teaser comes first, then open the Google Play Store Redeem screen and get ready!",
+"Live hoga:":"Goes live:","📲 Ready ho jao!":"📲 Get ready!","Abhi Google Play Store kholo → Menu → Payments → Redeem code screen par ruko. Drop live hote hi CLAIM dabao — sabse pehle wale ko code milega.":"Open Google Play Store → Menu → Payments → stay on the Redeem code screen. Tap CLAIM the moment it's live — the fastest gets the code.",
+"✅ Reminder ON hai":"✅ Reminder is ON","🔔 Mujhe yaad dilao (DM)":"🔔 Remind me (DM)","🔥 DROP LIVE":"🔥 DROP LIVE","🎲 LUCKY DROP LIVE":"🎲 LUCKY DROP LIVE",
+"Claimed":"Claimed","✅ Aapne claim kar liya! Rank #":"✅ You claimed it! Rank #","😔 Saare codes claim ho chuke hain.":"😔 All codes are claimed.","🛡 Pehle bot me Verify karein":"🛡 Verify in the bot first",
+"🎁 CLAIM NOW":"🎁 CLAIM NOW","🎲 JOIN LUCKY DRAW":"🎲 JOIN LUCKY DRAW","✅ Entry mil gayi — result aane wala hai":"✅ You're in — result coming up","⏳ Winners chune ja rahe hain…":"⏳ Picking winners…",
+"Join window band hone me":"Join window closes in","🏁 Claim Wall":"🏁 Claim Wall","🎲 Lucky Winners":"🎲 Lucky Winners","Abhi koi claim nahi — pehle aap bano! 🚀":"No claims yet — be the first! 🚀",
+"📜 Pichhle Drops":"📜 Past Drops","Sab codes claim ho gaye":"All codes claimed","Drop khatam":"Drop ended",
+"🎯 Reward Cards":"🎯 Reward Cards","Streak ya refer ke cards poore karo — ₹ redeem code pao. Redeem Now dabate hi admin ko request jaati hai, 24 ghante me code DM me aata hai.":"Complete streak or refer cards to win ₹ redeem codes. Tap Redeem Now to send a request — the code arrives in your DM within 24 hours.",
+"🔥 Streak Cards":"🔥 Streak Cards","👥 Refer Cards":"👥 Refer Cards","Cycle":"Cycle","din":"days","refer":"refers","Abhi":"Now",
+"🎁 Redeem Now":"🎁 Redeem Now","⏳ Admin ko bhej diya":"⏳ Sent to admin","✅ Redeemed":"✅ Redeemed","❌ Reject":"❌ Rejected","🔒 Locked":"🔒 Locked",
+"⏳ Late — admin ko yaad dilaya gaya":"⏳ Late — admin reminded","Purane cycle ke pending cards":"Pending cards from earlier cycle",
+"Confirm karein?":"Confirm?","Redeem Code request admin ko jayegi. 24 ghante ke andar code aapke DM me aayega.":"Your request goes to the admin. The code arrives in your DM within 24 hours.",
+"Redeem Now":"Redeem Now","Close":"Close","🏆 Winners":"🏆 Winners","👥 Referrers":"👥 Referrers","🔥 Streaks":"🔥 Streaks","Pehla winner jaldi hi yahan dikhega 🏆":"The first winner will appear here soon 🏆",
+"Abhi koi referral nahi — pehle aap bano champion! 🚀":"No referrals yet — be the champion! 🚀","Abhi kisi ki streak nahi — Daily Bonus se shuru karein 🔥":"No streaks yet — start with Daily Bonus 🔥",
+"📍 Aapka rank: #":"📍 Your rank: #","📍 Aap abhi list me nahi hain":"📍 You're not on the list yet",
+"✓ Verified":"✓ Verified","Verify baaki":"Verify pending","🎟 Tickets":"🎟 Tickets","🔥 Streak":"🔥 Streak","👥 Refer & Earn":"👥 Refer & Earn",
+"Har dost jo aapke link se aakar verify karega aur channel join karega = +1 ticket + refer card progress.":"Every friend who joins via your link, verifies and joins the channel = +1 ticket + refer card progress.",
+"📋 Copy Link":"📋 Copy Link","📤 Share":"📤 Share","🎁 Mere Claimed Codes":"🎁 My Claimed Codes","Abhi koi drop claim nahi kiya. Drops tab me live drop ka wait karein ⚡":"No drops claimed yet. Wait for a live drop in the Drops tab ⚡",
+"🤝 Sponsors":"🤝 Sponsors","Inhe join karke aap hamein support karte ho 💛":"Joining them supports us 💛","Partner channel":"Partner channel","Join":"Join",
+"⚙️ Settings":"⚙️ Settings","🔔 Streak reminder DM: ON":"🔔 Streak reminder DM: ON","🔕 Streak reminder DM: OFF":"🔕 Streak reminder DM: OFF","🌐 Language: Hinglish":"🌐 Language: Hinglish","🌐 Language: English":"🌐 Language: English",
+"ℹ️ Madad & FAQ":"ℹ️ Help & FAQ","📢 Channel":"📢 Channel","Support":"Support",
+"Kya sach me free hai?":"Is it really free?","Haan, 100% free. Yahan kabhi paise nahi maange jaate.":"Yes, 100% free. We never ask for money.",
+"Drop me code kaise milta hai?":"How do drops work?","Drop live hote hi CLAIM dabao. Sabse pehle tap karne walon ko code milta hai. Lucky mode me 10 sec me JOIN karo — random winners chune jate hain.":"Tap CLAIM the moment a drop goes live — the fastest get the code. In Lucky mode, JOIN within 10 sec and random winners are picked.",
+"Reward cards kaise milte hain?":"How do reward cards work?","Daily streak ya refer ke targets poore karo, card unlock hoga. Redeem Now dabao, admin 24 ghante me code DM me bhejega.":"Reach the streak or refer targets to unlock a card. Tap Redeem Now and the admin sends the code in DM within 24 hours.",
+"🎉 Mubarak ho! Rank #":"🎉 Congrats! Rank #","me claim kiya":"to claim","📋 Copy Code":"📋 Copy Code","Code DM me bhi bheja gaya hai. Jaldi Google Play me redeem karein!":"The code was also sent to your DM. Redeem it in Google Play quickly!",
+"✅ Copy ho gaya":"✅ Copied","✅ Code copy ho gaya":"✅ Code copied","✅ Referral link copy ho gaya":"✅ Referral link copied",
+"⏳ Drop abhi live nahi hua":"⏳ Drop isn't live yet","❌ Drop khatam ho chuka hai":"❌ The drop has ended","😔 Saare codes claim ho chuke":"😔 All codes are claimed","⏳ Lucky window band ho chuki hai":"⏳ Lucky window is closed",
+"✅ Entry mil gayi! Result aane wala hai 🎲":"✅ You're in! Result coming up 🎲","🍀 Is baar lucky nahi hue — agli baar!":"🍀 Not lucky this time — next time!",
+"Kuch gadbad hui, dobara try karein":"Something went wrong, try again","Network error":"Network error","Server busy hai, thodi der me try karein":"Server is busy, try again shortly",
+"✅ Redeem request admin ko bhej di!":"✅ Redeem request sent to admin!","Ye card pehle hi use ho chuka hai":"This card was already used","🚫 Account restricted hai":"🚫 Account restricted",
+"🔔 Reminder set! Drop se pehle DM aayega":"🔔 Reminder set! You'll get a DM before the drop","Reminder pehle se ON hai":"Reminder already ON","Pehle bot start karein":"Start the bot first",
+"✅ Aaj ka bonus pehle hi le liya":"✅ Today's bonus already claimed",
+"✅ Aap pehle hi claim kar chuke ho":"✅ You already claimed","Session expire — app dobara kholein":"Session expired — reopen the app",
+"🚫 Aapka account restricted hai. Support se contact karein.":"🚫 Your account is restricted. Contact support."
+};
+function t(s){ return (S.lang==="en" && EN[s]) ? EN[s] : s; }
+function loadLang(){ try{ var l=localStorage.getItem("asb_lang"); if(l==="en"||l==="hi") S.lang=l; }catch(e){} }
+function saveLang(){ try{ localStorage.setItem("asb_lang",S.lang); }catch(e){} }
 
 /* ------------------------------------------------ helpers */
 function el(tag,cls,text){var n=document.createElement(tag); if(cls)n.className=cls; if(text!=null)n.textContent=text; return n;}
@@ -219,9 +279,9 @@ function avatar(name,size,photo){
   return a;
 }
 function ago(iso){
-  if(!iso) return ""; var s=Math.max(1,(now()-new Date(iso).getTime())/1000);
-  if(s<60) return "abhi abhi"; if(s<3600) return Math.floor(s/60)+" min pehle";
-  if(s<86400) return Math.floor(s/3600)+" ghante pehle"; return Math.floor(s/86400)+" din pehle";
+  if(!iso) return ""; var s=Math.max(1,(now()-new Date(iso).getTime())/1000), en=S.lang==="en";
+  if(s<60) return en?"just now":"abhi abhi"; if(s<3600) return Math.floor(s/60)+(en?" min ago":" min pehle");
+  if(s<86400) return Math.floor(s/3600)+(en?" h ago":" ghante pehle"); return Math.floor(s/86400)+(en?" d ago":" din pehle");
 }
 function istTime(iso){
   try{return new Date(iso).toLocaleString("en-IN",{timeZone:"Asia/Kolkata",hour:"2-digit",minute:"2-digit",hour12:true,day:"2-digit",month:"short"});}catch(e){return "";}
@@ -229,7 +289,7 @@ function istTime(iso){
 function sec(ms){return (ms/1000).toFixed(1)+" sec";}
 function haptic(k){try{tg.HapticFeedback.impactOccurred(k||"light");}catch(e){}}
 function notify(k){try{tg.HapticFeedback.notificationOccurred(k||"success");}catch(e){}}
-function toast(msg){var t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(function(){t.classList.remove("show")},2600);}
+function toast(msg){var x=$("#toast");x.textContent=msg;x.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(function(){x.classList.remove("show")},2600);}
 function safeUrl(u){return /^https?:\/\//i.test(u||"")?u:"#";}
 function openLink(u){
   u=safeUrl(u); if(u==="#")return;
@@ -239,13 +299,22 @@ function openLink(u){
 }
 function openBot(){openLink(cfg.bot_link||("https://t.me/"+cfg.bot_username));}
 function copy(text,msg){
-  var done=function(){toast(msg||"✅ Copy ho gaya");notify("success");};
+  var done=function(){toast(msg||t("✅ Copy ho gaya"));notify("success");};
   if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,fallback);}else fallback();
   function fallback(){var i=document.createElement("input");i.value=text;document.body.appendChild(i);i.select();try{document.execCommand("copy");}catch(e){}i.remove();done();}
 }
 function B(label,cls,fn){var b=el("button","btn "+(cls||""),label); if(fn)b.addEventListener("click",function(){haptic();fn(b);}); return b;}
 function card(cls){return el("div","card "+(cls||""));}
-function empty(t){return el("div","empty",t);}
+function empty(x){return el("div","empty",x);}
+function nameNode(name,uname,me){
+  var b=el("b");
+  if(uname&&/^[A-Za-z0-9_]{3,32}$/.test(uname)){
+    var a=el("a","nlink",name); a.href="https://t.me/"+uname;
+    a.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();haptic();openLink(a.href);}); b.appendChild(a);
+  } else b.textContent=name;
+  if(me) b.appendChild(document.createTextNode(" ("+t("Aap")+")"));
+  return b;
+}
 
 /* ------------------------------------------------ api */
 function api(path,extra){
@@ -255,261 +324,377 @@ function api(path,extra){
 }
 function load(){
   if(S.loading) return Promise.resolve();
-  S.loading=true;
+  S.loading=true; S.lastLoad=Date.now();
   return api("/api/app").then(function(d){
     S.loading=false;
-    if(!d||!d.ok){ if(d&&d.error==="unauthorized") toast("Session expire — app dobara kholein"); return; }
-    S.data=d; S.offset=d.server_ms-Date.now(); render();
+    if(!d||!d.ok){
+      if(d&&d.error==="unauthorized") toast(t("Session expire — app dobara kholein"));
+      else if(d&&d.error==="busy") toast(t("Server busy hai, thodi der me try karein"));
+      return;
+    }
+    S.data=d; S.offset=d.server_ms-Date.now(); S.v=d.v; render();
   }).catch(function(){S.loading=false;});
 }
-function nextDelay(){
-  var cur=S.data&&S.data.drops.current;
-  if(cur){ if(cur.status==="live") return 3000;
-    var rem=(new Date(cur.go_live_at).getTime()-now())/1000; if(rem<150) return 3000; }
-  return 20000;
+function dropKey(d){var c=d&&d.drops.current;return c?c.no+":"+c.status:"none";}
+function pollState(){
+  return fetch("/api/state",{cache:"no-store"}).then(function(r){return r.json();}).then(function(st){
+    if(!st||!st.ok||!S.data) return;
+    var sd=st.drop, key=(sd&&(sd.status==="scheduled"||sd.status==="live"))?sd.no+":"+sd.status:"none";
+    if(key!==dropKey(S.data)){ if(Date.now()-S.lastLoad>1200) load(); return; }
+    var c=$("#dpCount"); if(c&&sd){c.textContent=sd.claimed+" / "+sd.total;} var bi=$("#dpBar"); if(bi&&sd) bi.style.width=Math.min(100,Math.round(sd.claimed/Math.max(1,sd.total)*100))+"%";
+    var lq=$("#dpQueued"); if(lq&&sd) lq.textContent=sd.queued;
+    if(st.v!==S.v){ var gap=(S.tab==="drops")?4000:25000; if(Date.now()-S.lastLoad>gap) load(); }
+  }).catch(function(){});
 }
-function loop(){ if(document.hidden){S.timer=setTimeout(loop,3000);return;} load().then(function(){S.timer=setTimeout(loop,nextDelay());}); }
-function burst(){var n=0;(function b(){load().then(function(){var c=S.data&&S.data.drops.current;if((!c||c.status!=="live")&&n++<14)setTimeout(b,700);});})();}
+function stateDelay(){
+  var c=S.data&&S.data.drops.current; if(!c) return 15000;
+  if(c.status==="live") return 3000;
+  var rem=(new Date(c.go_live_at).getTime()-now())/1000; return rem<300?3000:15000;
+}
+function stateLoop(){ if(document.hidden){setTimeout(stateLoop,4000);return;} pollState().then(function(){setTimeout(stateLoop,stateDelay());}); }
+function fullLoop(){ if(!document.hidden && Date.now()-S.lastLoad>40000) load(); setTimeout(fullLoop,15000); }
+function burst(){var n=0;(function b(){pollState().then(function(){var k=S.data?dropKey(S.data):"none";if(n++<14&&k.indexOf(":scheduled")>-1)setTimeout(b,700);});})();}
 
 /* ------------------------------------------------ tabs */
-function go(t){
-  S.tab=t; haptic("light");
-  document.querySelectorAll(".tab").forEach(function(x){x.classList.toggle("active",x.id==="t-"+t);});
-  document.querySelectorAll("#nav button").forEach(function(x){x.classList.toggle("on",x.getAttribute("data-t")===t);});
+function go(x){
+  S.tab=x; haptic("light");
+  document.querySelectorAll(".tab").forEach(function(n){n.classList.toggle("active",n.id==="t-"+x);});
+  document.querySelectorAll("#nav button").forEach(function(n){n.classList.toggle("on",n.getAttribute("data-t")===x);});
   window.scrollTo(0,0);
 }
 document.querySelectorAll("#nav button").forEach(function(b){b.addEventListener("click",function(){go(b.getAttribute("data-t"));});});
 
-/* ------------------------------------------------ renderers */
+/* ------------------------------------------------ render */
+function applyStatic(){
+  $("#hdrHi").textContent=t("Namaste 👋");
+  document.querySelectorAll("[data-i]").forEach(function(n){n.textContent=t(n.getAttribute("data-i"));});
+  $("#hdrLive").textContent=t("🔥 DROP LIVE");
+}
+function renderBanners(d){
+  var b=$("#banners"); b.textContent="";
+  if(d.me.banned){var x=el("div","banner bad",t("🚫 Aapka account restricted hai. Support se contact karein.")); b.appendChild(x);}
+  if(d.status&&d.status.degraded){b.appendChild(el("div","banner bad","⚠️ "+(d.status.msg||"Technical dikkat — thodi der baad try karein")));}
+  if(d.notice){b.appendChild(el("div","banner info","📣 "+d.notice));}
+}
 function render(){
   var d=S.data; if(!d) return;
   var me=d.me, cur=d.drops.current;
-  $("#hdrName").textContent=me.name||"Dost";
+  applyStatic(); renderBanners(d);
+  $("#hdrName").textContent=me.name||t("Dost");
   var hA=$("#hdrAv"); hA.textContent=""; var photo=tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.photo_url;
   var av=avatar(me.name,44,photo); hA.style.background=av.style.background; hA.style.fontSize=av.style.fontSize; hA.textContent=av.textContent; if(photo){var im=new Image();im.onload=function(){hA.textContent="";hA.appendChild(im);};im.src=photo;}
   var live=cur&&cur.status==="live"; $("#hdrLive").hidden=!live;
   var nd=$("#navDrops"); nd.classList.toggle("hot",!!cur); var old=$(".dot",nd); if(old)old.remove(); if(live) nd.appendChild(el("span","dot"));
-  renderHome(d); renderEntries(d); renderDrops(d); renderWinners(d); renderBoard(d); renderMe(d);
+  // lucky: pehle queued tha, ab drop khatam aur claim nahi -> toast
+  var prevKey=S.dropKey; S.dropKey=dropKey(d);
+  if(prevKey&&prevKey!==S.dropKey&&prevKey.indexOf(":live")>-1){
+    var pn=+prevKey.split(":")[0]; var won=(me.my_claims||[]).some(function(c){return c.drop===pn;});
+    if(S.queued[pn]&&!won){toast(t("🍀 Is baar lucky nahi hue — agli baar!"));} delete S.queued[pn];
+  }
+  renderHome(d); renderEntries(d); renderDrops(d); renderRewards(d); renderTop(d); renderMe(d);
   tick();
 }
 
+function two(n){return (n<10?"0":"")+n;}
 function cdBoxes(iso){
   var w=el("div","cd"); w.setAttribute("data-cd",iso);
-  [["h","Ghante"],["m","Minute"],["s","Second"]].forEach(function(x){var b=el("div"); b.appendChild(el("b",null,"00")).className="cd-"+x[0]; b.appendChild(el("span",null,x[1])); w.appendChild(b);});
+  [["h",S.lang==="en"?"Hours":"Ghante"],["m",S.lang==="en"?"Minutes":"Minute"],["s",S.lang==="en"?"Seconds":"Second"]].forEach(function(x){var b=el("div"); b.appendChild(el("b",null,"00")).className="cd-"+x[0]; b.appendChild(el("span",null,x[1])); w.appendChild(b);});
   return w;
 }
 function cdInline(iso){var s=el("b",null,"--:--"); s.setAttribute("data-cdt",iso); return s;}
-function two(n){return (n<10?"0":"")+n;}
+function fmtRem(rem){var h=Math.floor(rem/3600),m=Math.floor(rem%3600/60),x=rem%60;return (h?h+":"+two(m):two(m))+":"+two(x);}
 function tick(){
-  var t=now();
+  var tt=now();
   document.querySelectorAll("[data-cd]").forEach(function(w){
-    var iso=w.getAttribute("data-cd"), rem=Math.max(0,Math.floor((new Date(iso).getTime()-t)/1000));
+    var iso=w.getAttribute("data-cd"), rem=Math.max(0,Math.floor((new Date(iso).getTime()-tt)/1000));
     var h=Math.floor(rem/3600), m=Math.floor(rem%3600/60), s=rem%60;
     $(".cd-h",w).textContent=two(h); $(".cd-m",w).textContent=two(m); $(".cd-s",w).textContent=two(s);
     if(rem===0&&!S.fired[iso]){S.fired[iso]=1;burst();}
   });
   document.querySelectorAll("[data-cdt]").forEach(function(s){
-    var iso=s.getAttribute("data-cdt"), rem=Math.max(0,Math.floor((new Date(iso).getTime()-t)/1000));
-    var h=Math.floor(rem/3600), m=Math.floor(rem%3600/60), x=rem%60;
-    s.textContent=(h?h+":"+two(m):two(m))+":"+two(x);
+    var iso=s.getAttribute("data-cdt"), rem=Math.max(0,Math.floor((new Date(iso).getTime()-tt)/1000)); s.textContent=fmtRem(rem);
     if(rem===0&&!S.fired[iso]){S.fired[iso]=1;burst();}
+  });
+  document.querySelectorAll("[data-cdr]").forEach(function(s){
+    var rem=Math.floor((new Date(s.getAttribute("data-cdr")).getTime()-tt)/1000);
+    s.textContent=rem>0?"⏳ "+fmtRem(rem):t("⏳ Late — admin ko yaad dilaya gaya");
+  });
+  document.querySelectorAll("[data-cdw]").forEach(function(s){
+    var rem=Math.max(0,Math.ceil((new Date(s.getAttribute("data-cdw")).getTime()-tt)/1000)); s.textContent=rem+" sec";
   });
 }
 setInterval(tick,250);
 
+/* ---- Home */
+function nextCard(d,track,val){
+  var cards=d.reward_cfg[track]||[], rw=d.me.rewards||[], cyc=track==="streak"?d.me.streak_cycle:d.me.ref_cycle;
+  for(var i=0;i<cards.length;i++){var tg_=cards[i][0]; var has=rw.some(function(r){return r.track===track&&r.cycle===cyc&&r.target===tg_;}); if(!has) return {target:tg_,amount:cards[i][1],val:val};}
+  return null;
+}
 function renderHome(d){
   var b=$("#t-home"); b.textContent=""; var me=d.me, g=d.giveaway, cur=d.drops.current;
 
   if(!me.registered||!me.verified){
-    var n=card("notice"); n.appendChild(el("h3",null,!me.registered?"⚠️ Pehle bot start karein":"🛡 Verification baaki hai"));
-    n.appendChild(el("p",null,"Bot me Verify Now dabayein — fir Enter Code, Daily Bonus aur Drops sab unlock ho jayenge."));
-    var w=el("div","mt"); w.appendChild(B("🤖 Bot kholo","gold",openBot)); n.appendChild(w); b.appendChild(n);
+    var n=card("notice"); n.appendChild(el("h3",null,!me.registered?t("⚠️ Pehle bot start karein"):t("🛡 Verification baaki hai")));
+    n.appendChild(el("p",null,t("Bot me Verify Now dabayein — fir Enter Code, Daily Bonus, Rewards aur Drops sab unlock ho jayenge.")));
+    var w=el("div","mt"); w.appendChild(B(t("🤖 Bot kholo"),"gold",openBot)); n.appendChild(w); b.appendChild(n);
   }
 
   var hero=card("hero"); var top=el("div","flex sp");
-  top.appendChild(el("h3",null,"🎁 Live Giveaway"));
-  top.appendChild(el("span","pill "+(g.active?"ok":g.closing?"warn":"bad"),g.active?"LIVE":g.closing?"WINNER DECLARE HO RAHA":"NEXT SOON"));
+  top.appendChild(el("h3",null,t("🎁 Live Giveaway")));
+  top.appendChild(el("span","pill "+(g.active?"ok":g.closing?"warn":"bad"),g.active?t("LIVE"):g.closing?t("WINNER DECLARE HO RAHA"):t("NEXT SOON")));
   hero.appendChild(top);
   var r=el("div","row2 mt");
-  var s1=el("div","stat"); s1.appendChild(el("b",null,num(g.entries))); s1.appendChild(el("span",null,"Total Entries"));
-  var s2=el("div","stat"); s2.appendChild(el("b",null,me.entered?num(me.tickets):"—")); s2.appendChild(el("span",null,me.entered?"Aapke Tickets 🎟":"Entry baaki"));
+  var s1=el("div","stat"); s1.appendChild(el("b",null,num(g.entries))); s1.appendChild(el("span",null,t("Total Entries")));
+  var s2=el("div","stat"); s2.appendChild(el("b",null,me.entered?num(me.tickets):"—")); s2.appendChild(el("span",null,me.entered?t("Aapke Tickets 🎟"):t("Entry baaki")));
   r.appendChild(s1); r.appendChild(s2); hero.appendChild(r);
   var cta=el("div","mt");
-  if(me.entered) cta.appendChild(el("p",null,"✅ Entry confirm! Tickets badhane ke liye refer karein aur daily bonus lein."));
-  else if(g.active) cta.appendChild(B("🔑 Enter Code (Bot me)","gold",openBot));
-  else cta.appendChild(el("p",null,"Naya giveaway shuru hone par channel par notification aayega 🔔"));
+  if(g.video_url){ cta.appendChild(B(g.video_label,"vio",function(){openLink(g.video_url);})); cta.lastChild.style.marginBottom="10px"; }
+  if(me.entered) cta.appendChild(el("p",null,t("✅ Entry confirm! Tickets badhane ke liye refer karein aur daily bonus lein.")));
+  else if(g.active) cta.appendChild(B(t("🔑 Enter Code (Bot me)"),"gold",openBot));
+  else cta.appendChild(el("p",null,t("Naya giveaway shuru hone par channel par notification aayega 🔔")));
   hero.appendChild(cta); b.appendChild(hero);
 
   if(cur){
-    var dc=card(cur.status==="live"?"hero":""); var t=el("div","flex sp");
-    t.appendChild(el("h3",null,"⚡ Free Code Drop #"+cur.no)); t.appendChild(el("span","pill "+(cur.status==="live"?"live":"warn"),cur.status==="live"?"LIVE NOW":"SCHEDULED")); dc.appendChild(t);
-    dc.appendChild(el("p",null,cur.label+" · "+cur.total+" codes"));
-    if(cur.status==="scheduled"){var c=el("div","mt flex sp"); c.appendChild(el("span","mut","Live hone me:")); c.appendChild(cdInline(cur.go_live_at)); dc.appendChild(c);}
-    var bw=el("div","mt"); bw.appendChild(B(cur.status==="live"?"🔥 Claim karne jao":"⚡ Drop dekhein",cur.status==="live"?"gold":"vio",function(){go("drops");})); dc.appendChild(bw); b.appendChild(dc);
+    var dc=card(cur.status==="live"?"hero":""); var tt=el("div","flex sp");
+    tt.appendChild(el("h3",null,"⚡ Drop #"+cur.no)); tt.appendChild(el("span","pill "+(cur.status==="live"?"live":"warn"),cur.status==="live"?t("LIVE NOW"):t("SCHEDULED"))); dc.appendChild(tt);
+    dc.appendChild(el("p",null,cur.label+" · "+cur.total+" codes"+(cur.mode==="lucky"?" · 🎲 Lucky":"")));
+    if(cur.status==="scheduled"){var c=el("div","mt flex sp"); c.appendChild(el("span","mut",t("Live hone me:"))); c.appendChild(cdInline(cur.go_live_at)); dc.appendChild(c);}
+    var bw=el("div","mt"); bw.appendChild(B(cur.status==="live"?t("🔥 Claim karne jao"):t("⚡ Drop dekhein"),cur.status==="live"?"gold":"vio",function(){go("drops");})); dc.appendChild(bw); b.appendChild(dc);
   }
 
-  var dl=card(); var dt=el("div","flex sp"); dt.appendChild(el("h3",null,"🎁 Daily Bonus")); dt.appendChild(el("span","pill warn","🔥 "+me.streak+" din")); dl.appendChild(dt);
-  var nxt=MILES.filter(function(x){return x>me.streak;})[0], prev=MILES.filter(function(x){return x<=me.streak;}).pop()||0;
-  if(nxt){var pct=Math.min(100,Math.round((me.streak-prev)/(nxt-prev)*100)); var bar=el("div","bar mt"); var bi=el("i"); bi.style.width=pct+"%"; bar.appendChild(bi); dl.appendChild(bar); dl.appendChild(el("p","mt","Agla ticket reward: "+nxt+" din par ("+(nxt-me.streak)+" din baaki)"));}
-  else dl.appendChild(el("p","mt","🏆 Aapne sabhi streak milestones paar kar liye!"));
+  var nc=nextCard(d,"streak",me.streak);
+  var dl=card(); var dt=el("div","flex sp"); dt.appendChild(el("h3",null,t("🎁 Daily Bonus"))); dt.appendChild(el("span","pill warn","🔥 "+me.streak+" "+t("din"))); dl.appendChild(dt);
+  if(nc){var pct=Math.min(100,Math.round(me.streak/nc.target*100)); var bar=el("div","bar mt"); var bi=el("i"); bi.style.width=pct+"%"; bar.appendChild(bi); dl.appendChild(bar);
+    var lnk=el("p","mt","🎯 "+nc.val+"/"+nc.target+" "+t("din")+" → ₹"+nc.amount+" card"); dl.appendChild(lnk);}
+  else dl.appendChild(el("p","mt",t("🏆 Aapne sabhi streak milestones paar kar liye!")));
   var db=el("div","mt");
-  var btn=B(me.claimed_today?"✅ Aaj ka bonus le liya":"🎁 Daily Bonus Claim","gold",claimDaily);
-  if(!me.verified||me.claimed_today) btn.disabled=true; db.appendChild(btn); dl.appendChild(db); b.appendChild(dl);
+  var btn=B(me.claimed_today?t("✅ Aaj ka bonus le liya"):t("🎁 Daily Bonus Claim"),"gold",claimDaily);
+  if(!me.verified||me.claimed_today||me.banned) btn.disabled=true; db.appendChild(btn); dl.appendChild(db); b.appendChild(dl);
 
-  var tr=el("div","row3"); [["Users",d.totals.users],["Winners",d.totals.winners],["Referrals",me.refs||0]].forEach(function(x){var s=el("div","stat"); s.appendChild(el("b",null,num(x[1]))); s.appendChild(el("span",null,x[0])); tr.appendChild(s);}); b.appendChild(tr);
+  var rn=nextCard(d,"refer",me.ref_cycle_count);
+  if(rn){var rc=card(); var rt=el("div","flex sp"); rt.appendChild(el("h3",null,t("👥 Refer & Earn"))); rt.appendChild(el("span","pill",me.refs+" "+t("Referrals"))); rc.appendChild(rt);
+    var bar2=el("div","bar mt"); var bi2=el("i"); bi2.style.width=Math.min(100,Math.round(rn.val/rn.target*100))+"%"; bar2.appendChild(bi2); rc.appendChild(bar2);
+    rc.appendChild(el("p","mt","🎯 "+rn.val+"/"+rn.target+" refer → ₹"+rn.amount+" card")); var rb=el("div","mt"); rb.appendChild(B(t("🎯 Reward Cards"),"vio",function(){go("rewards");})); rc.appendChild(rb); b.appendChild(rc);}
+
+  var tr=el("div","row3"); [[t("Users"),d.totals.users],[t("Winners"),d.totals.winners],[t("Referrals"),me.refs||0]].forEach(function(x){var s=el("div","stat"); s.appendChild(el("b",null,num(x[1]))); s.appendChild(el("span",null,x[0])); tr.appendChild(s);}); b.appendChild(tr);
 }
 
+/* ---- Entries */
 function renderEntries(d){
   var b=$("#t-entries"); var keep=$("#q",b); var val=keep?keep.value:S.search; b.textContent="";
-  var h=el("div","h2"); h.appendChild(el("span",null,"🎟 Live Entries")); h.appendChild(el("small",null,num(d.entries_total)+" total")); b.appendChild(h);
-  var q=el("input","search"); q.id="q"; q.placeholder="🔍 Naam search karein"; q.value=val; q.autocomplete="off"; b.appendChild(q);
+  var h=el("div","h2"); h.appendChild(el("span",null,t("🎟 Live Entries"))); h.appendChild(el("small",null,num(d.entries_total)+" "+t("total"))); b.appendChild(h);
+  var q=el("input","search"); q.id="q"; q.placeholder=t("🔍 Naam search karein"); q.value=val; q.autocomplete="off"; b.appendChild(q);
   var list=el("div"); b.appendChild(list);
   function draw(){
     S.search=q.value.trim().toLowerCase(); list.textContent="";
     var rows=d.entries.filter(function(e){return !S.search||e.name.toLowerCase().indexOf(S.search)>-1;});
-    if(!rows.length){list.appendChild(empty(d.entries.length?"Koi match nahi mila":"Abhi koi entry nahi — pehle aap bano! 🚀"));return;}
+    if(!rows.length){list.appendChild(empty(d.entries.length?t("Koi match nahi mila"):t("Abhi koi entry nahi — pehle aap bano! 🚀")));return;}
     rows.forEach(function(e){
       var it=el("div","item"+(e.me?" me":"")); it.appendChild(avatar(e.name,40));
-      var nm=el("div","nm"); nm.appendChild(el("b",null,e.name+(e.me?" (Aap)":""))); nm.appendChild(el("small",null,ago(e.at))); it.appendChild(nm);
+      var nm=el("div","nm"); nm.appendChild(nameNode(e.name,e.uname,e.me)); nm.appendChild(el("small",null,ago(e.at))); it.appendChild(nm);
       it.appendChild(el("span","chip","🎟 "+e.tickets)); list.appendChild(it);
     });
-    if(d.entries_total>d.entries.length&&!S.search) list.appendChild(el("p","mut",Math.max(0,d.entries_total-d.entries.length)+" aur entries (latest 100 dikh rahi hain)")).style.textAlign="center";
   }
   q.addEventListener("input",draw); draw();
 }
 
+/* ---- Drops */
 function wallList(wall,limit){
-  var w=el("div"); if(!wall.length){w.appendChild(empty("Abhi koi claim nahi — pehle aap bano! 🚀"));return w;}
+  var w=el("div"); if(!wall.length){w.appendChild(empty(t("Abhi koi claim nahi — pehle aap bano! 🚀")));return w;}
   var medals=["🥇","🥈","🥉"];
   wall.slice(0,limit||50).forEach(function(c){
     var it=el("div","item"+(c.me?" me":"")); it.appendChild(el("span","rk",c.rank<=3?medals[c.rank-1]:String(c.rank)));
-    var nm=el("div","nm"); nm.appendChild(el("b",null,c.name+(c.me?" (Aap)":""))); it.appendChild(nm); it.appendChild(el("span","chip","⚡ "+sec(c.ms))); w.appendChild(it);
+    var nm=el("div","nm"); nm.appendChild(nameNode(c.name,c.uname,c.me)); it.appendChild(nm); it.appendChild(el("span","chip","⚡ "+sec(c.ms))); w.appendChild(it);
   });
   return w;
 }
-
 function renderDrops(d){
   var b=$("#t-drops"); b.textContent=""; var cur=d.drops.current, me=d.me;
-  var h=el("div","h2"); h.appendChild(el("span",null,"⚡ Free Code Drops")); b.appendChild(h);
+  var h=el("div","h2"); h.appendChild(el("span",null,t("⚡ Free Code Drops"))); b.appendChild(h);
 
   if(!cur){
-    var c=card(); c.appendChild(el("h3",null,"Abhi koi drop nahi")); c.appendChild(el("p",null,"Admin kabhi bhi free redeem code drop karta hai. Channel ke notification ON rakhein 🔔 — drop se pehle teaser aata hai, tab Google Play Store ka Redeem screen kholkar ready baith jao!"));
+    var c=card(); c.appendChild(el("h3",null,t("Abhi koi drop nahi"))); c.appendChild(el("p",null,t("Admin kabhi bhi free redeem code drop karta hai. Channel ke notification ON rakhein 🔔 — drop se pehle teaser aata hai, tab Google Play Store ka Redeem screen kholkar ready baith jao!")));
     b.appendChild(c);
   } else if(cur.status==="scheduled"){
-    var c1=card("hero"); var t=el("div","flex sp"); t.appendChild(el("h3",null,"Drop #"+cur.no)); t.appendChild(el("span","pill warn","SCHEDULED")); c1.appendChild(t);
-    c1.appendChild(el("p",null,"🎁 "+cur.label+" · sirf "+cur.total+" logon ke liye"));
-    c1.appendChild(cdBoxes(cur.go_live_at)); var lt=el("p",null,"Live hoga: "+istTime(cur.go_live_at)+" (IST)"); lt.style.textAlign="center"; c1.appendChild(lt);
+    var c1=card("hero"); var tt=el("div","flex sp"); tt.appendChild(el("h3",null,"Drop #"+cur.no+(cur.mode==="lucky"?" 🎲":""))); tt.appendChild(el("span","pill warn",t("SCHEDULED"))); c1.appendChild(tt);
+    c1.appendChild(el("p",null,"🎁 "+cur.label+" · "+cur.total+" codes"));
+    c1.appendChild(cdBoxes(cur.go_live_at)); var lt=el("p",null,t("Live hoga:")+" "+istTime(cur.go_live_at)+" (IST)"); lt.style.textAlign="center"; c1.appendChild(lt);
     b.appendChild(c1);
-    var tip=card("notice"); tip.appendChild(el("h3",null,"📲 Ready ho jao!")); tip.appendChild(el("p",null,"Abhi Google Play Store kholo → Menu → Payments → Redeem code screen par ruko. Drop live hote hi CLAIM dabao — sabse pehle wale ko code milega."));
+    var tip=card("notice"); tip.appendChild(el("h3",null,t("📲 Ready ho jao!"))); tip.appendChild(el("p",null,t("Abhi Google Play Store kholo → Menu → Payments → Redeem code screen par ruko. Drop live hote hi CLAIM dabao — sabse pehle wale ko code milega.")));
     b.appendChild(tip);
-    var rb=B(cur.reminded?"✅ Reminder ON hai":"🔔 Mujhe yaad dilao (DM)","vio",function(btn){btn.disabled=true;api("/api/remind",{drop:cur.no}).then(function(r){toast(r.status==="ok"?"🔔 Reminder set! Drop se pehle DM aayega":r.status==="already"?"Reminder pehle se ON hai":r.status==="unregistered"?"Pehle bot start karein":"Reminder nahi lag paya");load();});});
-    if(cur.reminded) rb.disabled=true; b.appendChild(rb); b.lastChild.style.marginBottom="14px";
+    var rb=B(cur.reminded?t("✅ Reminder ON hai"):t("🔔 Mujhe yaad dilao (DM)"),"vio",function(btn){btn.disabled=true;api("/api/remind",{drop:cur.no}).then(function(r){toast(r.status==="ok"?t("🔔 Reminder set! Drop se pehle DM aayega"):r.status==="already"?t("Reminder pehle se ON hai"):r.status==="unregistered"?t("Pehle bot start karein"):"…");load();});});
+    if(cur.reminded) rb.disabled=true; rb.style.marginBottom="14px"; b.appendChild(rb);
   } else {
+    var lucky=cur.mode==="lucky";
     var mine=(me.my_claims||[]).filter(function(x){return x.drop===cur.no;})[0];
-    var c2=card("hero"); var t2=el("div","flex sp"); t2.appendChild(el("h3",null,"🔥 DROP LIVE — Drop #"+cur.no)); t2.appendChild(el("span","pill live","LIVE")); c2.appendChild(t2);
+    var md=me.my_drop&&me.my_drop.drop===cur.no?me.my_drop:null;
+    var c2=card("hero"); var t2=el("div","flex sp"); t2.appendChild(el("h3",null,(lucky?t("🎲 LUCKY DROP LIVE"):t("🔥 DROP LIVE"))+" #"+cur.no)); t2.appendChild(el("span","pill live",t("LIVE"))); c2.appendChild(t2);
     c2.appendChild(el("p",null,"🎁 "+cur.label));
-    var pr=el("div","mt flex sp"); pr.appendChild(el("span","mut","Claimed")); pr.appendChild(el("b",null,cur.claimed+" / "+cur.total)); c2.appendChild(pr);
-    var bar=el("div","bar mt"); var bi=el("i"); bi.style.width=Math.min(100,Math.round(cur.claimed/Math.max(1,cur.total)*100))+"%"; bar.appendChild(bi); c2.appendChild(bar);
+    var pr=el("div","mt flex sp"); pr.appendChild(el("span","mut",lucky?"👥":t("Claimed")));
+    var cnt=el("b",null,lucky?String(cur.queued):(cur.claimed+" / "+cur.total)); cnt.id=lucky?"dpQueued":"dpCount"; pr.appendChild(cnt); c2.appendChild(pr);
+    if(!lucky){var bar=el("div","bar mt"); var bi=el("i"); bi.id="dpBar"; bi.style.width=Math.min(100,Math.round(cur.claimed/Math.max(1,cur.total)*100))+"%"; bar.appendChild(bi); c2.appendChild(bar);}
     var act=el("div","mt");
-    if(mine){ act.appendChild(el("p",null,"✅ Aapne claim kar liya! Rank #"+mine.rank+" · "+sec(mine.ms)));
-      var cd=el("div","code"); cd.appendChild(el("code",null,mine.code||"")); cd.appendChild(B("📋","sm",function(){copy(mine.code,"✅ Code copy ho gaya");})); act.appendChild(cd);
-    } else if(cur.claimed>=cur.total){ act.appendChild(el("p",null,"😔 Saare codes claim ho chuke hain."));
-    } else if(!me.verified){ act.appendChild(B("🛡 Pehle bot me Verify karein","gold",openBot));
-    } else { var cb=el("button","claim","🎁 CLAIM NOW"); cb.addEventListener("click",function(){claimDrop(cur.no,cb);}); act.appendChild(cb); }
+    var windowOpen=lucky&&!cur.lucky_closed&&cur.window_ends&&new Date(cur.window_ends).getTime()>now();
+    if(mine){ act.appendChild(el("p",null,t("✅ Aapne claim kar liya! Rank #")+mine.rank+" · "+sec(mine.ms)));
+      var cd=el("div","code"); cd.appendChild(el("code",null,mine.code||"")); cd.appendChild(B("📋","sm",function(){copy(mine.code,t("✅ Code copy ho gaya"));})); act.appendChild(cd);
+    } else if(lucky&&md&&md.queued){ act.appendChild(el("p",null,windowOpen?t("✅ Entry mil gayi — result aane wala hai"):t("⏳ Winners chune ja rahe hain…")));
+      if(windowOpen){var wp=el("p","mut"); wp.appendChild(document.createTextNode(t("Join window band hone me")+" ")); var ws=el("b"); ws.setAttribute("data-cdw",cur.window_ends); wp.appendChild(ws); act.appendChild(wp);}
+    } else if(lucky&&!windowOpen){ act.appendChild(el("p",null,t("⏳ Winners chune ja rahe hain…")));
+    } else if(!lucky&&cur.claimed>=cur.total){ act.appendChild(el("p",null,t("😔 Saare codes claim ho chuke hain.")));
+    } else if(!me.verified){ act.appendChild(B(t("🛡 Pehle bot me Verify karein"),"gold",openBot));
+    } else { var cb=el("button","claim"+(lucky?" lucky":""),lucky?t("🎲 JOIN LUCKY DRAW"):t("🎁 CLAIM NOW")); cb.addEventListener("click",function(){claimDrop(cur.no,cb,lucky);}); act.appendChild(cb);
+      if(lucky){var wp2=el("p","mut mt"); wp2.style.textAlign="center"; wp2.appendChild(document.createTextNode(t("Join window band hone me")+" ")); var ws2=el("b"); ws2.setAttribute("data-cdw",cur.window_ends); wp2.appendChild(ws2); act.appendChild(wp2);} }
     c2.appendChild(act); b.appendChild(c2);
-    var wh=el("div","h2"); wh.appendChild(el("span",null,"🏁 Claim Wall")); b.appendChild(wh); b.appendChild(wallList(cur.wall));
+    if(!lucky){var wh=el("div","h2"); wh.appendChild(el("span",null,t("🏁 Claim Wall"))); b.appendChild(wh); b.appendChild(wallList(cur.wall));}
   }
 
   if(d.drops.history.length){
-    var hh=el("div","h2"); hh.appendChild(el("span",null,"📜 Pichhle Drops")); b.appendChild(hh);
+    var hh=el("div","h2"); hh.appendChild(el("span",null,t("📜 Pichhle Drops"))); b.appendChild(hh);
     d.drops.history.forEach(function(h2){
-      var c3=card(); var tt=el("div","flex sp"); tt.appendChild(el("h3",null,"Drop #"+h2.no+" · "+h2.label)); tt.appendChild(el("span","pill ok",h2.claimed+"/"+h2.total)); c3.appendChild(tt);
-      c3.appendChild(el("p",null,(h2.ended_at?ago(h2.ended_at)+" · ":"")+(h2.end_reason==="sold_out"?"Sab codes claim ho gaye":"Drop khatam")));
-      c3.appendChild(wallList(h2.wall,3)).style.marginTop="10px"; b.appendChild(c3);
+      var c3=card(); var tt3=el("div","flex sp"); tt3.appendChild(el("h3",null,"Drop #"+h2.no+(h2.mode==="lucky"?" 🎲":"")+" · "+h2.label)); tt3.appendChild(el("span","pill ok",h2.claimed+"/"+h2.total)); c3.appendChild(tt3);
+      c3.appendChild(el("p",null,(h2.ended_at?ago(h2.ended_at)+" · ":"")+(h2.end_reason==="sold_out"?t("Sab codes claim ho gaye"):t("Drop khatam"))));
+      var wl=wallList(h2.wall,h2.mode==="lucky"?10:3); wl.style.marginTop="10px"; c3.appendChild(wl); b.appendChild(c3);
     });
   }
 }
 
-function renderWinners(d){
-  var b=$("#t-winners"); b.textContent="";
-  var h=el("div","h2"); h.appendChild(el("span",null,"🏆 Winners")); h.appendChild(el("small",null,num(d.totals.winners)+" declared")); b.appendChild(h);
-  if(!d.winners.length){b.appendChild(empty("Pehla winner jaldi hi yahan dikhega 🏆"));return;}
-  d.winners.forEach(function(w){
-    var it=el("div","item"+(w.me?" me":"")); it.appendChild(avatar("🏆",44)); it.lastChild.style.background="linear-gradient(135deg,var(--gold),var(--pink))";
-    var nm=el("div","nm"); nm.appendChild(el("b",null,w.name+(w.me?" (Aap) 🎉":""))); nm.appendChild(el("small",null,(w.no?"Giveaway #"+w.no+" · ":"")+ago(w.at)+" · "+num(w.entries)+" entries")); it.appendChild(nm);
-    it.appendChild(el("span","chip","🏆")); b.appendChild(it);
+/* ---- Rewards */
+function rewardFor(d,track,cyc,target){
+  return (d.me.rewards||[]).filter(function(r){return r.track===track&&r.cycle===cyc&&r.target===target;})[0];
+}
+function rcCard(d,track,target,amount,val,cyc,isNext){
+  var r=rewardFor(d,track,cyc,target); var unit=track==="streak"?t("din"):t("refer");
+  var c=el("div","rc"); c.appendChild(el("div","amt","₹"+amount)); c.appendChild(el("div","req",target+" "+unit));
+  if(r) return rcState(c,r,track);
+  c.classList.add("lock");
+  if(isNext){ var bar=el("div","bar"); var bi=el("i"); bi.style.width=Math.min(100,Math.round(val/target*100))+"%"; bar.appendChild(bi); c.appendChild(bar); c.appendChild(el("span","tag mut",val+" / "+target)); }
+  else c.appendChild(el("span","tag mut",t("🔒 Locked")));
+  return c;
+}
+function rcState(c,r,track){
+  if(r.status==="earned"){ c.classList.add("ready"); c.appendChild(B(t("🎁 Redeem Now"),"gold",function(){confirmRedeem(r,track);})); }
+  else if(r.status==="requested"){ c.classList.add("ready"); c.appendChild(el("span","tag",t("⏳ Admin ko bhej diya"))); var tm=el("span","tag mut"); tm.setAttribute("data-cdr",r.deadline); c.appendChild(tm); }
+  else if(r.status==="sent"){ c.classList.add("done"); c.appendChild(el("span","tag",t("✅ Redeemed"))); }
+  else { c.classList.add("done"); c.appendChild(el("span","tag",t("❌ Reject"))); }
+  return c;
+}
+function renderRewards(d){
+  var b=$("#t-rewards"); b.textContent=""; var me=d.me;
+  var h=el("div","h2"); h.appendChild(el("span",null,t("🎯 Reward Cards"))); b.appendChild(h);
+  var intro=card(); intro.appendChild(el("p",null,t("Streak ya refer ke cards poore karo — ₹ redeem code pao. Redeem Now dabate hi admin ko request jaati hai, 24 ghante me code DM me aata hai."))); b.appendChild(intro);
+  [["streak",t("🔥 Streak Cards"),me.streak,me.streak_cycle],["refer",t("👥 Refer Cards"),me.ref_cycle_count,me.ref_cycle]].forEach(function(T){
+    var track=T[0], cards=d.reward_cfg[track]||[], val=T[2]||0, cyc=T[3]||1;
+    var hd=el("div","h2"); hd.appendChild(el("span",null,T[1])); hd.appendChild(el("small",null,t("Cycle")+" #"+cyc+" · "+t("Abhi")+" "+val)); b.appendChild(hd);
+    var nextT=null; cards.forEach(function(c_){ if(nextT===null&&!rewardFor(d,track,cyc,c_[0])) nextT=c_[0]; });
+    var grid=el("div","rcards"); cards.forEach(function(c_){grid.appendChild(rcCard(d,track,c_[0],c_[1],val,cyc,c_[0]===nextT));}); b.appendChild(grid);
+    var older=(me.rewards||[]).filter(function(r){return r.track===track&&r.cycle!==cyc&&(r.status==="earned"||r.status==="requested");});
+    if(older.length){ var oh=el("div","h2"); oh.style.marginTop="14px"; oh.appendChild(el("small",null,t("Purane cycle ke pending cards"))); b.appendChild(oh);
+      var og=el("div","rcards"); older.forEach(function(r){var c=el("div","rc"); c.appendChild(el("div","amt","₹"+r.amount)); c.appendChild(el("div","req",r.target+" "+(track==="streak"?t("din"):t("refer"))+" · #"+r.cycle)); og.appendChild(rcState(c,r,track));}); b.appendChild(og); }
+    var sp=el("div"); sp.style.height="10px"; b.appendChild(sp);
   });
 }
-
-function renderBoard(d){
-  var b=$("#t-board"); b.textContent="";
-  var h=el("div","h2"); h.appendChild(el("span",null,"🏅 Leaderboard")); b.appendChild(h);
-  var seg=el("div","seg"); [["refs","👥 Referrers"],["streaks","🔥 Streaks"]].forEach(function(x){var bt=el("button",S.board===x[0]?"on":"",x[1]); bt.addEventListener("click",function(){S.board=x[0];haptic();renderBoard(d);}); seg.appendChild(bt);}); b.appendChild(seg);
-  var rows=d.board[S.board]; var unit=S.board==="refs"?"referrals":"din";
-  if(!rows.length){b.appendChild(empty(S.board==="refs"?"Abhi koi referral nahi — pehle aap bano champion! 🚀":"Abhi kisi ki streak nahi — Daily Bonus se shuru karein 🔥"));return;}
-  var order=[1,0,2], heights=[70,100,52], medals=["🥈","🥇","🥉"];
-  var pod=el("div","podium");
-  order.forEach(function(i,k){var r=rows[i]; if(!r) return; var p=el("div","pod"); p.appendChild(avatar(r.name,i===0?58:46)); p.appendChild(el("b",null,r.name+(r.me?" ★":""))); p.appendChild(el("small",null,r.count+" "+unit)); var st=el("div","step",medals[k]); st.style.height=heights[k]+"px"; p.appendChild(st); pod.appendChild(p);});
-  b.appendChild(pod);
-  rows.slice(3).forEach(function(r,i){var it=el("div","item"+(r.me?" me":"")); it.appendChild(el("span","rk",String(i+4))); it.appendChild(avatar(r.name,36)); var nm=el("div","nm"); nm.appendChild(el("b",null,r.name+(r.me?" (Aap)":""))); it.appendChild(nm); it.appendChild(el("span","chip",r.count+" "+unit)); b.appendChild(it);});
-  var mine=S.board==="refs"?d.me.rank_refs:d.me.rank_streak;
-  var yc=card(); yc.appendChild(el("p",null,mine?"📍 Aapka rank: #"+mine:"📍 Aap abhi list me nahi hain — "+(S.board==="refs"?"Profile se referral link share karein!":"Daily Bonus claim karke streak banayein!"))); b.appendChild(yc);
+function confirmRedeem(r,track){
+  var bg=el("div","sheet-bg"); var sh=el("div","sheet");
+  sh.appendChild(el("div",null,"🎁")).style.fontSize="3rem";
+  sh.appendChild(el("h3",null,"₹"+r.amount+" "+t("Confirm karein?"))); sh.appendChild(el("p","mut",t("Redeem Code request admin ko jayegi. 24 ghante ke andar code aapke DM me aayega.")));
+  var rw=el("div","row2 mt");
+  rw.appendChild(B(t("Redeem Now"),"gold",function(btn){btn.disabled=true;
+    api("/api/reward/redeem",{reward:r.id}).then(function(x){bg.remove();
+      if(x.status==="ok"){toast(t("✅ Redeem request admin ko bhej di!"));notify("success");confetti();}
+      else if(x.status==="already") toast(t("Ye card pehle hi use ho chuka hai"));
+      else if(x.status==="banned") toast(t("🚫 Account restricted hai"));
+      else toast(t("Kuch gadbad hui, dobara try karein"));
+      load();}).catch(function(){bg.remove();toast(t("Network error"));});}));
+  rw.appendChild(B(t("Close"),"",function(){bg.remove();})); sh.appendChild(rw);
+  bg.appendChild(sh); bg.addEventListener("click",function(e){if(e.target===bg)bg.remove();}); document.body.appendChild(bg);
 }
 
+/* ---- Top (winners + leaderboards) */
+function renderTop(d){
+  var b=$("#t-top"); b.textContent="";
+  var h=el("div","h2"); h.appendChild(el("span",null,"🏆 Top")); b.appendChild(h);
+  var seg=el("div","seg"); [["winners",t("🏆 Winners")],["refs",t("👥 Referrers")],["streaks",t("🔥 Streaks")]].forEach(function(x){var bt=el("button",S.top===x[0]?"on":"",x[1]); bt.addEventListener("click",function(){S.top=x[0];haptic();renderTop(d);}); seg.appendChild(bt);}); b.appendChild(seg);
+  if(S.top==="winners"){
+    if(!d.winners.length){b.appendChild(empty(t("Pehla winner jaldi hi yahan dikhega 🏆")));return;}
+    d.winners.forEach(function(w){
+      var it=el("div","item"+(w.me?" me":"")); var av=avatar("🏆",44); av.style.background="linear-gradient(135deg,var(--gold),var(--pink))"; it.appendChild(av);
+      var nm=el("div","nm"); nm.appendChild(nameNode(w.name,w.uname,w.me)); nm.appendChild(el("small",null,(w.no?"Giveaway #"+w.no+" · ":"")+ago(w.at)+" · "+num(w.entries)+" entries")); it.appendChild(nm);
+      it.appendChild(el("span","chip","🏆")); b.appendChild(it);
+    }); return;
+  }
+  var rows=d.board[S.top], unit=S.top==="refs"?(S.lang==="en"?"referrals":"referrals"):t("din");
+  if(!rows.length){b.appendChild(empty(S.top==="refs"?t("Abhi koi referral nahi — pehle aap bano champion! 🚀"):t("Abhi kisi ki streak nahi — Daily Bonus se shuru karein 🔥")));return;}
+  var order=[1,0,2], heights=[70,100,52], medals=["🥈","🥇","🥉"];
+  var pod=el("div","podium");
+  order.forEach(function(i,k){var r=rows[i]; if(!r) return; var p=el("div","pod"); p.appendChild(avatar(r.name,i===0?58:46)); p.appendChild(nameNode(r.name,r.uname,false)); p.appendChild(el("small",null,r.count+" "+unit)); var st=el("div","step",medals[k]); st.style.height=heights[k]+"px"; p.appendChild(st); pod.appendChild(p);});
+  b.appendChild(pod);
+  rows.slice(3).forEach(function(r,i){var it=el("div","item"+(r.me?" me":"")); it.appendChild(el("span","rk",String(i+4))); it.appendChild(avatar(r.name,36)); var nm=el("div","nm"); nm.appendChild(nameNode(r.name,r.uname,r.me)); it.appendChild(nm); it.appendChild(el("span","chip",r.count+" "+unit)); b.appendChild(it);});
+  var mine=S.top==="refs"?d.me.rank_refs:d.me.rank_streak;
+  var yc=card(); yc.appendChild(el("p",null,mine?t("📍 Aapka rank: #")+mine:t("📍 Aap abhi list me nahi hain"))); b.appendChild(yc);
+}
+
+/* ---- Profile */
 function renderMe(d){
   var b=$("#t-me"); b.textContent=""; var me=d.me;
   var pc=card("hero"); var fl=el("div","flex"); fl.appendChild(avatar(me.name,58,tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.photo_url));
-  var nm=el("div"); nm.style.flex="1"; nm.appendChild(el("h3",null,me.name||"Dost")); nm.appendChild(el("span","pill "+(me.verified?"ok":"warn"),me.verified?"✓ Verified":"Verify baaki")); fl.appendChild(nm); pc.appendChild(fl);
-  var g=el("div","row3 mt"); [["🎟 Tickets",me.tickets||0],["🔥 Streak",me.streak||0],["👥 Referrals",me.refs||0]].forEach(function(x){var s=el("div","stat"); s.appendChild(el("b",null,num(x[1]))); s.appendChild(el("span",null,x[0])); g.appendChild(s);}); pc.appendChild(g); b.appendChild(pc);
+  var nm=el("div"); nm.style.flex="1"; nm.appendChild(el("h3",null,me.name||t("Dost"))); nm.appendChild(el("span","pill "+(me.verified?"ok":"warn"),me.verified?t("✓ Verified"):t("Verify baaki"))); fl.appendChild(nm); pc.appendChild(fl);
+  var g=el("div","row3 mt"); [[t("🎟 Tickets"),me.tickets||0],[t("🔥 Streak"),me.streak||0],[t("Referrals"),me.refs||0]].forEach(function(x){var s=el("div","stat"); s.appendChild(el("b",null,num(x[1]))); s.appendChild(el("span",null,x[0])); g.appendChild(s);}); pc.appendChild(g); b.appendChild(pc);
 
-  var rc=card(); rc.appendChild(el("h3",null,"👥 Refer & Earn")); rc.appendChild(el("p",null,"Har dost jo aapke link se aakar verify karega = +1 ticket. Zyada tickets = zyada winning chance!"));
+  var rc=card(); rc.appendChild(el("h3",null,t("👥 Refer & Earn"))); rc.appendChild(el("p",null,t("Har dost jo aapke link se aakar verify karega aur channel join karega = +1 ticket + refer card progress.")));
   var rl=el("div","code"); rl.appendChild(el("code",null,me.ref_link||"")); rc.appendChild(rl);
-  var br=el("div","row2 mt"); br.appendChild(B("📋 Copy Link","",function(){copy(me.ref_link,"✅ Referral link copy ho gaya");}));
-  br.appendChild(B("📤 Share","gold",function(){openLink("https://t.me/share/url?url="+encodeURIComponent(me.ref_link)+"&text="+encodeURIComponent("🎁 Free redeem codes jeeto! Is bot ko join karo:"));})); rc.appendChild(br); b.appendChild(rc);
+  var br=el("div","row2 mt"); br.appendChild(B(t("📋 Copy Link"),"",function(){copy(me.ref_link,t("✅ Referral link copy ho gaya"));}));
+  br.appendChild(B(t("📤 Share"),"gold",function(){openLink("https://t.me/share/url?url="+encodeURIComponent(me.ref_link)+"&text="+encodeURIComponent("🎁 Free redeem codes jeeto! Is bot ko join karo:"));})); rc.appendChild(br); b.appendChild(rc);
 
-  var mc=card(); mc.appendChild(el("h3",null,"🎁 Mere Claimed Codes"));
-  if(!(me.my_claims||[]).length) mc.appendChild(el("p",null,"Abhi koi drop claim nahi kiya. Drops tab me live drop ka wait karein ⚡"));
-  (me.my_claims||[]).forEach(function(c){var it=el("div","code"); var w=el("div"); w.style.flex="1"; w.appendChild(el("small","mut","Drop #"+c.drop+" · #"+c.rank+" · "+ago(c.at))); w.appendChild(el("code",null,c.code||"")).style.display="block"; it.appendChild(w); it.appendChild(B("📋","sm",function(){copy(c.code,"✅ Code copy ho gaya");})); mc.appendChild(it);}); b.appendChild(mc);
+  var mc=card(); mc.appendChild(el("h3",null,t("🎁 Mere Claimed Codes")));
+  if(!(me.my_claims||[]).length) mc.appendChild(el("p",null,t("Abhi koi drop claim nahi kiya. Drops tab me live drop ka wait karein ⚡")));
+  (me.my_claims||[]).forEach(function(c){var it=el("div","code"); var w=el("div"); w.style.flex="1"; w.appendChild(el("small","mut","Drop #"+c.drop+" · #"+c.rank+" · "+ago(c.at))); w.appendChild(el("code",null,c.code||"")).style.display="block"; it.appendChild(w); it.appendChild(B("📋","sm",function(){copy(c.code,t("✅ Code copy ho gaya"));})); mc.appendChild(it);}); b.appendChild(mc);
 
-  if(d.sponsors.length){var sc=card(); sc.appendChild(el("h3",null,"🤝 Sponsors")); sc.appendChild(el("p",null,"Inhe join karke aap hamein support karte ho 💛"));
-    d.sponsors.forEach(function(s){var it=el("div","item"); it.style.marginTop="10px"; it.appendChild(avatar(s.title,38)); var n2=el("div","nm"); n2.appendChild(el("b",null,s.title)); n2.appendChild(el("small",null,"Partner channel")); it.appendChild(n2); it.appendChild(B("Join","sm",function(){openLink(s.link);})); sc.appendChild(it);}); b.appendChild(sc);}
+  if(d.sponsors.length){var sc=card(); sc.appendChild(el("h3",null,t("🤝 Sponsors"))); sc.appendChild(el("p",null,t("Inhe join karke aap hamein support karte ho 💛")));
+    d.sponsors.forEach(function(s){var it=el("div","item"); it.style.marginTop="10px"; it.appendChild(avatar(s.title,38)); var n2=el("div","nm"); n2.appendChild(el("b",null,s.title)); n2.appendChild(el("small",null,t("Partner channel"))); it.appendChild(n2); it.appendChild(B(t("Join"),"sm",function(){openLink(s.link);})); sc.appendChild(it);}); b.appendChild(sc);}
 
-  var hc=card(); hc.appendChild(el("h3",null,"ℹ️ Madad & FAQ"));
-  [["Kya sach me free hai?","Haan, 100% free. Yahan kabhi paise nahi maange jaate."],
-   ["Drop me code kaise milta hai?","Drop live hote hi CLAIM dabao. Sabse pehle tap karne walon ko code milta hai aur claim wall par naam aata hai."],
-   ["Tickets kaise badhein?","Dost ko refer karo (+1) aur Daily Bonus streak banao (3/7/14/30 din par extra)."]
-  ].forEach(function(f){var dt=el("details","faq card"); var sm=el("summary",null,f[0]); dt.appendChild(sm); dt.appendChild(el("p",null,f[1])); hc.appendChild(dt);});
-  var bb=el("div","row2 mt"); bb.appendChild(B("📢 Channel","",function(){openLink(cfg.channel_link);})); bb.appendChild(B("🆘 "+(cfg.support_username||"Support"),"",function(){openLink(cfg.support_link);})); hc.appendChild(bb); b.appendChild(hc);
+  var st=card(); st.appendChild(el("h3",null,t("⚙️ Settings")));
+  var sr=B(me.streak_remind?t("🔔 Streak reminder DM: ON"):t("🔕 Streak reminder DM: OFF"),"",function(btn){btn.disabled=true;api("/api/settings",{streak_remind:!me.streak_remind}).then(function(){load();});}); sr.style.marginTop="10px"; st.appendChild(sr);
+  var lg=B(S.lang==="en"?t("🌐 Language: English"):t("🌐 Language: Hinglish"),"",function(){S.lang=S.lang==="en"?"hi":"en";saveLang();render();}); lg.style.marginTop="10px"; st.appendChild(lg); b.appendChild(st);
+
+  var hc=card(); hc.appendChild(el("h3",null,t("ℹ️ Madad & FAQ")));
+  [[t("Kya sach me free hai?"),t("Haan, 100% free. Yahan kabhi paise nahi maange jaate.")],
+   [t("Drop me code kaise milta hai?"),t("Drop live hote hi CLAIM dabao. Sabse pehle tap karne walon ko code milta hai. Lucky mode me 10 sec me JOIN karo — random winners chune jate hain.")],
+   [t("Reward cards kaise milte hain?"),t("Daily streak ya refer ke targets poore karo, card unlock hoga. Redeem Now dabao, admin 24 ghante me code DM me bhejega.")]
+  ].forEach(function(f){var dt=el("details","faq card"); dt.appendChild(el("summary",null,f[0])); dt.appendChild(el("p",null,f[1])); hc.appendChild(dt);});
+  var bb=el("div","row2 mt"); bb.appendChild(B(t("📢 Channel"),"",function(){openLink(cfg.channel_link);})); bb.appendChild(B("🆘 "+(cfg.support_username||t("Support")),"",function(){openLink(cfg.support_link);})); hc.appendChild(bb); b.appendChild(hc);
 }
 
 /* ------------------------------------------------ actions */
 function showCode(r){
   var bg=el("div","sheet-bg"); var sh=el("div","sheet");
   sh.appendChild(el("div",null,"🎉")).style.fontSize="3rem";
-  sh.appendChild(el("h3",null,"Mubarak ho! Rank #"+r.rank)); sh.appendChild(el("p","mut","⚡ "+sec(r.ms)+" me claim kiya"));
+  sh.appendChild(el("h3",null,t("🎉 Mubarak ho! Rank #")+r.rank)); sh.appendChild(el("p","mut","⚡ "+sec(r.ms)));
   var cd=el("div","code"); cd.appendChild(el("code",null,r.code)); sh.appendChild(cd);
-  var rw=el("div","row2 mt"); rw.appendChild(B("📋 Copy Code","gold",function(){copy(r.code,"✅ Code copy ho gaya");})); rw.appendChild(B("Close","",function(){bg.remove();})); sh.appendChild(rw);
-  sh.appendChild(el("p","mut mt","Code DM me bhi bheja gaya hai. Jaldi Google Play me redeem karein!")).style.fontSize=".8rem";
+  var rw=el("div","row2 mt"); rw.appendChild(B(t("📋 Copy Code"),"gold",function(){copy(r.code,t("✅ Code copy ho gaya"));})); rw.appendChild(B(t("Close"),"",function(){bg.remove();})); sh.appendChild(rw);
+  sh.appendChild(el("p","mut mt",t("Code DM me bhi bheja gaya hai. Jaldi Google Play me redeem karein!"))).style.fontSize=".8rem";
   bg.appendChild(sh); bg.addEventListener("click",function(e){if(e.target===bg)bg.remove();}); document.body.appendChild(bg);
 }
-function claimDrop(no,btn){
+function claimDrop(no,btn,lucky){
   btn.disabled=true; haptic("heavy");
   api("/api/claim",{drop:no}).then(function(r){
-    var m={not_live:"⏳ Drop abhi live nahi hua",ended:"❌ Drop khatam ho chuka hai",sold_out:"😔 Saare codes claim ho chuke",unverified:"🛡 Pehle bot me Verify karein",not_found:"Drop nahi mila"};
-    if(r.status==="ok"||r.status==="duplicate"){ if(r.code){showCode(r);} notify("success"); if(r.status==="ok")confetti(); else toast("✅ Aap pehle hi claim kar chuke ho"); }
-    else { toast(m[r.status]||"Kuch gadbad hui, dobara try karein"); notify("error"); }
+    var m={not_live:"⏳ Drop abhi live nahi hua",ended:"❌ Drop khatam ho chuka hai",sold_out:"😔 Saare codes claim ho chuke",late:"⏳ Lucky window band ho chuki hai",unverified:"🛡 Pehle bot me Verify karein",banned:"🚫 Account restricted hai",not_found:"Kuch gadbad hui, dobara try karein"};
+    if(r.status==="ok"||r.status==="duplicate"){ if(r.code){showCode(r);} notify("success"); if(r.status==="ok")confetti(); else toast(t("✅ Aap pehle hi claim kar chuke ho")); }
+    else if(r.status==="queued"){ S.queued[no]=true; notify("success"); toast(t("✅ Entry mil gayi! Result aane wala hai 🎲")); }
+    else { toast(t(m[r.status]||"Kuch gadbad hui, dobara try karein")); notify("error"); }
     load();
-  }).catch(function(){toast("Network error");btn.disabled=false;});
+  }).catch(function(){toast(t("Network error"));btn.disabled=false;});
 }
 function claimDaily(btn){
   btn.disabled=true;
   api("/api/daily").then(function(r){
-    if(r.status==="ok"){notify("success");confetti();toast("🎁 Streak "+r.streak+" din!"+(r.reward?" +"+r.reward+" ticket 🎟":""));}
-    else if(r.status==="already") toast("✅ Aaj ka bonus pehle hi le liya");
-    else if(r.status==="unverified") toast("🛡 Pehle bot me Verify karein");
-    else toast("Kuch gadbad hui");
+    if(r.status==="ok"){notify("success");confetti();toast("🎁 "+r.streak+" "+t("din")+(r.reward?" +"+r.reward+" 🎟":"")+(r.card?" · 🎯 ₹"+r.card.amount+" card!":""));}
+    else if(r.status==="already") toast(t("✅ Aaj ka bonus pehle hi le liya"));
+    else if(r.status==="unverified") toast(t("🛡 Pehle bot me Verify karein"));
+    else if(r.status==="banned") toast(t("🚫 Account restricted hai"));
+    else toast(t("Kuch gadbad hui, dobara try karein"));
     load();
-  }).catch(function(){toast("Network error");btn.disabled=false;});
+  }).catch(function(){toast(t("Network error"));btn.disabled=false;});
 }
 
 /* ------------------------------------------------ confetti */
@@ -523,6 +708,7 @@ function confetti(){
 
 /* ------------------------------------------------ boot */
 function boot(){
+  loadLang();
   if(!inTG){
     $("#gate").hidden=false; var g=$("#gateBtn"); g.href=safeUrl(cfg.bot_link||("https://t.me/"+cfg.bot_username)); g.target="_blank"; g.rel="noopener"; return;
   }
@@ -531,10 +717,10 @@ function boot(){
     var light=tg.colorScheme==="light"; document.documentElement.setAttribute("data-theme",light?"light":"dark");
     var col=light?"#f2f4ff":"#0b0f1f"; if(tg.setHeaderColor) tg.setHeaderColor(col); if(tg.setBackgroundColor) tg.setBackgroundColor(col); if(tg.setBottomBarColor) tg.setBottomBarColor(col);
   }catch(e){}
-  $("#app").hidden=false;
-  var u=tg.initDataUnsafe&&tg.initDataUnsafe.user; if(u){$("#hdrName").textContent=u.first_name||"Dost";}
-  loop();
-  document.addEventListener("visibilitychange",function(){if(!document.hidden)load();});
+  $("#app").hidden=false; applyStatic();
+  var u=tg.initDataUnsafe&&tg.initDataUnsafe.user; if(u){$("#hdrName").textContent=u.first_name||t("Dost");}
+  load().then(function(){stateLoop();fullLoop();});
+  document.addEventListener("visibilitychange",function(){if(!document.hidden&&Date.now()-S.lastLoad>5000)load();});
 }
 boot();
 })();
