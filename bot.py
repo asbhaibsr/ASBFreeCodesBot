@@ -77,7 +77,7 @@ SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "@asbhaibsr")
 SUPPORT_LINK = f"https://t.me/{SUPPORT_USERNAME.lstrip('@')}"
 
 TASK_CHANNEL_LINK = os.getenv("TASK_CHANNEL_LINK", "https://t.me/asfreecodes")
-TASK_CHANNEL_ID = int(os.getenv("TASK_CHANNEL_ID", "-1004474019310"))
+TASK_CHANNEL_ID = int(os.getenv("TASK_CHANNEL_ID", "-1002892671107"))
 
 LOG_CHANNEL_LINK = os.getenv("LOG_CHANNEL_LINK", "https://t.me/+Te9_yU3XUQE4MTg1")
 LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID", "-1003099940809"))
