@@ -2,14 +2,18 @@
 site_app.py — Telegram Mini App server for ASB FreeCodes Bot (aiohttp)
 
 Routes
-  GET  /            -> Mini App page (static/index.html)
-  GET  /health      -> plain "OK" (Koyeb health check + UptimeRobot monitor)
-  POST /api/app     -> sab tabs ka data (Home, Entries, Drops, Winners, Board, Profile)
-  POST /api/claim   -> live drop claim
-  POST /api/daily   -> daily bonus claim
-  POST /api/remind  -> drop reminder ON
+  GET  /                    -> Mini App page (static/index.html)
+  GET  /health              -> plain "OK" (Koyeb health check + UptimeRobot monitor)
+  GET  /api/state           -> bahut halka live drop status (sirf memory, DB nahi)
+  POST /api/app             -> sab tabs ka data
+  POST /api/claim           -> drop claim / lucky join
+  POST /api/daily           -> daily bonus
+  POST /api/remind          -> drop reminder ON
+  POST /api/reward/redeem   -> reward card redeem request
+  POST /api/settings        -> user settings (streak reminder)
 
-Har /api/* request me Telegram ka signed `initData` chahiye — bina Telegram ke koi data nahi dekh sakta.
+Har POST me Telegram ka signed `initData` chahiye — bina Telegram ke koi data nahi dekh sakta.
+Free tier ke liye: shared data cache, per-user cache, concurrency cap, rate limits.
 """
 
 import asyncio
@@ -49,6 +53,15 @@ def iso(dt) -> str:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
     return dt.astimezone(timezone.utc).isoformat()
+
+
+def video_label(url: str) -> str:
+    u = (url or "").lower()
+    if "youtu" in u:
+        return "▶️ YouTube par dekho"
+    if "instagram" in u:
+        return "📸 Instagram par dekho"
+    return "🔗 Video dekho"
 
 
 def verify_init_data(init_data: str, bot_token: str, max_age: int = 86400):
@@ -104,20 +117,33 @@ def jerr(msg: str, status: int) -> web.Response:
 
 
 # ---------------------------------------------------------------- data builders
-async def drop_shared(db: dict, d: dict, wall_limit: int) -> dict:
+def drop_window(ctx: dict, live_at):
+    if not live_at:
+        return ""
+    return iso(live_at + timedelta(seconds=ctx["public"].get("lucky_window", 10)))
+
+
+async def drop_shared(db: dict, ctx: dict, d: dict, wall_limit: int) -> dict:
     cur = db["drop_claims"].find({"drop": d["_id"], "rank": {"$ne": None}}).sort("rank", 1).limit(wall_limit)
     wall = [
-        {"uid": w.get("uid"), "rank": w.get("rank"), "name": short_name(w.get("name")), "ms": w.get("ms", 0)}
+        {"uid": w.get("uid"), "rank": w.get("rank"), "name": short_name(w.get("name")), "uname": w.get("username"),
+         "ms": w.get("ms", 0)}
         async for w in cur
     ]
+    ld = (ctx.get("live") or {}).get("drop")
+    queued = ld["queued"] if ld and ld.get("no") == d["_id"] else 0
     return {
         "no": d["_id"],
         "label": d.get("label", "Redeem Code"),
         "status": d.get("status"),
+        "mode": d.get("mode", "fast"),
         "total": d.get("total", 0),
         "claimed": d.get("claimed_count", 0),
+        "queued": queued,
         "go_live_at": iso(d.get("go_live_at")),
         "live_at": iso(d.get("live_at")),
+        "window_ends": drop_window(ctx, d.get("live_at")) if d.get("mode") == "lucky" else "",
+        "lucky_closed": bool(d.get("lucky_closed")),
         "ended_at": iso(d.get("ended_at")),
         "end_reason": d.get("end_reason"),
         "wall": wall,
@@ -125,7 +151,7 @@ async def drop_shared(db: dict, d: dict, wall_limit: int) -> dict:
     }
 
 
-async def build_shared(db: dict) -> dict:
+async def build_shared(db: dict, ctx: dict) -> dict:
     users, entries, winners = db["users"], db["entries"], db["winners"]
     sponsors, config, drops = db["sponsors"], db["config"], db["drops"]
 
@@ -134,6 +160,8 @@ async def build_shared(db: dict) -> dict:
         "giveaway": {
             "active": bool(gw and not gw.get("closing")),
             "closing": bool(gw and gw.get("closing")),
+            "video_url": (gw or {}).get("video_url") or "",
+            "video_label": video_label((gw or {}).get("video_url") or ""),
         },
         "totals": {
             "users": await users.count_documents({"junk": {"$ne": True}}),
@@ -150,35 +178,41 @@ async def build_shared(db: dict) -> dict:
 
     async for e in entries.find({}).sort("entered_at", -1).limit(100):
         shared["entries"].append(
-            {"uid": e["_id"], "name": short_name(e.get("name")), "tickets": int(e.get("tickets", 1)),
-             "at": iso(e.get("entered_at"))}
+            {"uid": e["_id"], "name": short_name(e.get("name")), "uname": e.get("username"),
+             "tickets": int(e.get("tickets", 1)), "at": iso(e.get("entered_at"))}
         )
     async for w in winners.find({}).sort("declared_at", -1).limit(20):
         shared["winners"].append(
-            {"uid": w.get("winner_id"), "name": short_name(w.get("name")), "at": iso(w.get("declared_at")),
-             "no": w.get("giveaway_no"), "entries": w.get("entries_count", 0)}
+            {"uid": w.get("winner_id"), "name": short_name(w.get("name")), "uname": w.get("username"),
+             "at": iso(w.get("declared_at")), "no": w.get("giveaway_no"), "entries": w.get("entries_count", 0)}
         )
     async for u in users.find({"ref_count": {"$gt": 0}}).sort("ref_count", -1).limit(20):
-        shared["board"]["refs"].append({"uid": u["_id"], "name": short_name(u.get("name")), "count": u.get("ref_count", 0)})
+        shared["board"]["refs"].append(
+            {"uid": u["_id"], "name": short_name(u.get("name")), "uname": u.get("username"), "count": u.get("ref_count", 0)}
+        )
     async for u in users.find({"best_streak": {"$gt": 0}}).sort("best_streak", -1).limit(20):
-        shared["board"]["streaks"].append({"uid": u["_id"], "name": short_name(u.get("name")), "count": u.get("best_streak", 0)})
+        shared["board"]["streaks"].append(
+            {"uid": u["_id"], "name": short_name(u.get("name")), "uname": u.get("username"), "count": u.get("best_streak", 0)}
+        )
     async for s in sponsors.find({"active": True}):
         shared["sponsors"].append({"title": s.get("title", "Sponsor"), "link": s.get("link", "")})
 
     active = await drops.find_one({"status": {"$in": ["scheduled", "live"]}})
     if active:
-        shared["drops"]["current"] = await drop_shared(db, active, 60)
+        shared["drops"]["current"] = await drop_shared(db, ctx, active, 60)
     async for d in drops.find({"status": "ended"}).sort("_id", -1).limit(5):
-        shared["drops"]["history"].append(await drop_shared(db, d, 12))
+        shared["drops"]["history"].append(await drop_shared(db, ctx, d, 12))
     return shared
 
 
 def drop_public(v: dict, uid: int) -> dict:
     return {
-        "no": v["no"], "label": v["label"], "status": v["status"], "total": v["total"], "claimed": v["claimed"],
-        "go_live_at": v["go_live_at"], "live_at": v["live_at"], "ended_at": v["ended_at"],
+        "no": v["no"], "label": v["label"], "status": v["status"], "mode": v["mode"], "total": v["total"],
+        "claimed": v["claimed"], "queued": v["queued"], "go_live_at": v["go_live_at"], "live_at": v["live_at"],
+        "window_ends": v["window_ends"], "lucky_closed": v["lucky_closed"], "ended_at": v["ended_at"],
         "end_reason": v["end_reason"], "reminded": uid in v["_reminders"],
-        "wall": [{"rank": w["rank"], "name": w["name"], "ms": w["ms"], "me": w["uid"] == uid} for w in v["wall"]],
+        "wall": [{"rank": w["rank"], "name": w["name"], "uname": w["uname"], "ms": w["ms"], "me": w["uid"] == uid}
+                 for w in v["wall"]],
     }
 
 
@@ -189,10 +223,12 @@ def personalize(sh: dict, uid: int) -> dict:
         "totals": sh["totals"],
         "sponsors": sh["sponsors"],
         "entries_total": sh["entries_total"],
-        "entries": [{"name": e["name"], "tickets": e["tickets"], "at": e["at"], "me": e["uid"] == uid} for e in sh["entries"]],
-        "winners": [{"name": w["name"], "at": w["at"], "no": w["no"], "entries": w["entries"], "me": w["uid"] == uid} for w in sh["winners"]],
+        "entries": [{"name": e["name"], "uname": e["uname"], "tickets": e["tickets"], "at": e["at"], "me": e["uid"] == uid}
+                    for e in sh["entries"]],
+        "winners": [{"name": w["name"], "uname": w["uname"], "at": w["at"], "no": w["no"], "entries": w["entries"],
+                     "me": w["uid"] == uid} for w in sh["winners"]],
         "board": {
-            k: [{"name": x["name"], "count": x["count"], "me": x["uid"] == uid} for x in sh["board"][k]]
+            k: [{"name": x["name"], "uname": x["uname"], "count": x["count"], "me": x["uid"] == uid} for x in sh["board"][k]]
             for k in ("refs", "streaks")
         },
         "drops": {
@@ -202,12 +238,13 @@ def personalize(sh: dict, uid: int) -> dict:
     }
 
 
-async def build_me(db: dict, ctx: dict, uid: int, tg_user: dict) -> dict:
-    users, entries, drop_claims = db["users"], db["entries"], db["drop_claims"]
+async def build_me(db: dict, ctx: dict, uid: int, tg_user: dict, current_no) -> dict:
+    users, entries, drop_claims, rewards = db["users"], db["entries"], db["drop_claims"], db["rewards"]
     ref_link = f"https://t.me/{ctx['public']['bot_username']}?start=ref_{uid}"
     u = await users.find_one({"_id": uid})
     if not u:
-        return {"registered": False, "name": tg_user.get("first_name", ""), "ref_link": ref_link, "my_claims": []}
+        return {"registered": False, "name": tg_user.get("first_name", ""), "ref_link": ref_link,
+                "my_claims": [], "rewards": []}
 
     entry = await entries.find_one({"_id": uid})
     refs = int(u.get("ref_count", 0))
@@ -215,21 +252,43 @@ async def build_me(db: dict, ctx: dict, uid: int, tg_user: dict) -> dict:
     today = datetime.now(IST).date().isoformat()
     my_claims = []
     async for c in drop_claims.find({"uid": uid, "rank": {"$ne": None}}).sort("at", -1).limit(10):
-        my_claims.append({"drop": c.get("drop"), "code": c.get("code"), "rank": c.get("rank"), "ms": c.get("ms", 0), "at": iso(c.get("at"))})
+        my_claims.append({"drop": c.get("drop"), "code": c.get("code"), "rank": c.get("rank"), "ms": c.get("ms", 0),
+                          "at": iso(c.get("at"))})
+    my_drop = None
+    if current_no is not None:
+        c = await drop_claims.find_one({"_id": f"{current_no}:{uid}"})
+        if c:
+            my_drop = {"drop": current_no, "queued": bool(c.get("lucky") and c.get("rank") is None and not c.get("lost")),
+                       "lost": bool(c.get("lost")), "rank": c.get("rank")}
+    rw = []
+    async for r in rewards.find({"uid": uid}).sort("earned_at", -1).limit(40):
+        rw.append({
+            "id": r["_id"], "track": r.get("track"), "cycle": r.get("cycle"), "target": r.get("target"),
+            "amount": r.get("amount"), "status": r.get("status"), "earned_at": iso(r.get("earned_at")),
+            "requested_at": iso(r.get("requested_at")), "deadline": iso(r.get("deadline")),
+            "sent_at": iso(r.get("sent_at")),
+        })
     return {
         "registered": True,
         "name": u.get("name") or tg_user.get("first_name", ""),
         "verified": bool(u.get("verified")),
+        "banned": bool(u.get("banned")),
         "entered": entry is not None,
         "tickets": int(entry.get("tickets", 1)) if entry else int(u.get("bonus_tickets", 0)),
         "refs": refs,
+        "ref_cycle": int(u.get("ref_cycle", 1)),
+        "ref_cycle_count": int(u.get("ref_cycle_count", 0)),
         "rank_refs": (await users.count_documents({"ref_count": {"$gt": refs}}) + 1) if refs > 0 else None,
         "rank_streak": (await users.count_documents({"best_streak": {"$gt": best}}) + 1) if best > 0 else None,
         "streak": int(u.get("streak", 0)),
+        "streak_cycle": int(u.get("streak_cycle", 1)),
         "best_streak": best,
         "claimed_today": u.get("last_claim") == today,
+        "streak_remind": u.get("streak_remind") is not False,
         "ref_link": ref_link,
         "my_claims": my_claims,
+        "my_drop": my_drop,
+        "rewards": rw,
     }
 
 
@@ -239,17 +298,25 @@ def create_app(ctx: dict) -> web.Application:
     ctx = {
       "db": {...collections, bot start hone ke baad bharta hai...},
       "public": {...page par jaane wali non-secret settings...},
-      "bot_token": "...",   # sirf initData verify karne ke liye (HTML me kabhi nahi jata)
-      "actions": {"claim": fn, "daily": fn, "remind": fn},   # bot.py ke functions
+      "bot_token": "...",               # sirf initData verify karne ke liye
+      "actions": {...},                 # bot.py ke functions (claim/daily/remind/redeem/settings)
+      "live": {"v": int, "drop": {...}},  # drop ki in-memory state
+      "status": {"degraded": bool, "msg": str}, "notice": {"text": str}, "reward_cfg": {...},
+      "hooks": {},                      # site_app yahan invalidate() register karta hai
     }
     """
-    app = web.Application()
+    app = web.Application(client_max_size=64 * 1024)
     app["ctx"] = ctx
-    app["shared"] = {"t": 0.0, "data": None}
+    app["shared"] = {"t": 0.0, "v": -1, "data": None}
     app["shared_lock"] = asyncio.Lock()
+    app["me_cache"] = {}
+    app["sem"] = asyncio.Semaphore(20)
+    app["waiting"] = 0
     app["ip_limiter"] = RateLimiter(240)
+    app["state_limiter"] = RateLimiter(300)
     app["uid_limiter"] = RateLimiter(90)
     app["claim_limiter"] = RateLimiter(30)
+    ctx.setdefault("hooks", {})["invalidate"] = lambda uid: app["me_cache"].pop(uid, None)
 
     html_raw = (BASE_DIR / "static" / "index.html").read_text(encoding="utf-8")
     cfg_json = json.dumps(ctx["public"], ensure_ascii=False).replace("</", "<\\/")
@@ -260,6 +327,25 @@ def create_app(ctx: dict) -> web.Application:
 
     async def health(_request):
         return web.Response(text="OK ✅ ASB FreeCodes Bot is running")
+
+    async def api_state(request):
+        if not app["state_limiter"].allow(client_ip(request)):
+            return jerr("too many requests", 429)
+        live = ctx.get("live") or {"v": 0, "drop": None}
+        d = live.get("drop")
+        drop = None
+        if d:
+            drop = {
+                "no": d["no"], "status": d["status"], "mode": d.get("mode", "fast"), "claimed": d.get("claimed", 0),
+                "total": d.get("total", 0), "queued": d.get("queued", 0), "go_live_at": iso(d.get("go_live_at")),
+                "live_at": iso(d.get("live_at")), "window_ends": iso(d.get("window_ends")),
+                "lucky_closed": bool(d.get("lucky_closed")),
+            }
+        return web.json_response(
+            {"ok": True, "v": live.get("v", 0), "server_ms": int(time.time() * 1000), "drop": drop,
+             "degraded": bool(ctx.get("status", {}).get("degraded"))},
+            headers={"Cache-Control": "no-store"},
+        )
 
     async def authed(request, limiter=None):
         """(uid, tg_user, body, error_response)"""
@@ -284,25 +370,56 @@ def create_app(ctx: dict) -> web.Application:
     async def get_shared():
         async with app["shared_lock"]:
             cache = app["shared"]
-            cur = (cache["data"] or {}).get("drops", {}).get("current")
-            ttl = 2 if cur else 6
-            if cache["data"] is None or time.time() - cache["t"] > ttl:
-                cache["data"] = await build_shared(ctx["db"])
+            live_v = (ctx.get("live") or {}).get("v", 0)
+            age = time.time() - cache["t"]
+            has_drop = bool((cache["data"] or {}).get("drops", {}).get("current"))
+            ttl = 2.0 if has_drop else 8.0
+            if cache["data"] is None or age > ttl or (cache["v"] != live_v and age > 0.8):
+                cache["data"] = await build_shared(ctx["db"], ctx)
                 cache["t"] = time.time()
+                cache["v"] = live_v
             return cache["data"]
+
+    async def get_me(uid, tg_user, shared):
+        mc = app["me_cache"]
+        hit = mc.get(uid)
+        if hit and time.time() - hit[0] < 8:
+            return hit[1]
+        cur = shared["drops"]["current"]
+        me = await build_me(ctx["db"], ctx, uid, tg_user, cur["no"] if cur else None)
+        if len(mc) > 5000:
+            mc.clear()
+        mc[uid] = (time.time(), me)
+        return me
+
+    async def compute(uid, tg_user):
+        shared = await get_shared()
+        me = await get_me(uid, tg_user, shared)
+        return shared, me
 
     async def api_app(request):
         uid, tg_user, _body, err = await authed(request, app["uid_limiter"])
         if err:
             return err
+        if app["waiting"] >= 150:  # overload: jaldi "busy" bolo, DB pe load mat badhao
+            return jerr("busy", 503)
+        app["waiting"] += 1
         try:
-            shared = await get_shared()
-            me = await build_me(ctx["db"], ctx, uid, tg_user)
+            async with app["sem"]:
+                shared, me = await compute(uid, tg_user)
         except Exception:
             logger.exception("api_app failed")
             return jerr("server error", 500)
+        finally:
+            app["waiting"] -= 1
         payload = personalize(shared, uid)
-        payload.update(ok=True, server_ms=int(time.time() * 1000), me=me)
+        payload.update(
+            ok=True, server_ms=int(time.time() * 1000), me=me,
+            v=(ctx.get("live") or {}).get("v", 0),
+            notice=(ctx.get("notice") or {}).get("text", ""),
+            status=dict(ctx.get("status") or {}),
+            reward_cfg=ctx.get("reward_cfg") or {},
+        )
         return web.json_response(payload, headers={"Cache-Control": "no-store"})
 
     def drop_no(body):
@@ -311,36 +428,35 @@ def create_app(ctx: dict) -> web.Application:
         except (TypeError, ValueError):
             return None
 
-    async def api_claim(request):
+    async def action(request, name, build_args):
         uid, _u, body, err = await authed(request, app["claim_limiter"])
         if err:
             return err
-        no = drop_no(body)
-        if no is None or "claim" not in ctx.get("actions", {}):
+        fn = ctx.get("actions", {}).get(name)
+        if not fn:
+            return jerr("starting", 503)
+        args = build_args(uid, body)
+        if args is None:
             return jerr("bad request", 400)
-        res = await ctx["actions"]["claim"](uid, no)
+        res = await fn(*args)
+        app["me_cache"].pop(uid, None)
         app["shared"]["t"] = 0.0
         return web.json_response({"ok": True, **res}, headers={"Cache-Control": "no-store"})
+
+    async def api_claim(request):
+        return await action(request, "claim", lambda uid, b: None if drop_no(b) is None else (uid, drop_no(b)))
 
     async def api_daily(request):
-        uid, _u, _body, err = await authed(request, app["claim_limiter"])
-        if err:
-            return err
-        if "daily" not in ctx.get("actions", {}):
-            return jerr("starting", 503)
-        res = await ctx["actions"]["daily"](uid)
-        return web.json_response({"ok": True, **res}, headers={"Cache-Control": "no-store"})
+        return await action(request, "daily", lambda uid, b: (uid,))
 
     async def api_remind(request):
-        uid, _u, body, err = await authed(request, app["claim_limiter"])
-        if err:
-            return err
-        no = drop_no(body)
-        if no is None or "remind" not in ctx.get("actions", {}):
-            return jerr("bad request", 400)
-        res = await ctx["actions"]["remind"](uid, no)
-        app["shared"]["t"] = 0.0
-        return web.json_response({"ok": True, **res}, headers={"Cache-Control": "no-store"})
+        return await action(request, "remind", lambda uid, b: None if drop_no(b) is None else (uid, drop_no(b)))
+
+    async def api_redeem(request):
+        return await action(request, "redeem", lambda uid, b: (uid, str(b.get("reward", ""))[:80]) if b.get("reward") else None)
+
+    async def api_settings(request):
+        return await action(request, "settings", lambda uid, b: (uid, bool(b.get("streak_remind"))))
 
     async def on_prepare(_request, response):
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
@@ -349,10 +465,13 @@ def create_app(ctx: dict) -> web.Application:
     app.on_response_prepare.append(on_prepare)
     app.router.add_get("/", index)
     app.router.add_get("/health", health)
+    app.router.add_get("/api/state", api_state)
     app.router.add_post("/api/app", api_app)
     app.router.add_post("/api/claim", api_claim)
     app.router.add_post("/api/daily", api_daily)
     app.router.add_post("/api/remind", api_remind)
+    app.router.add_post("/api/reward/redeem", api_redeem)
+    app.router.add_post("/api/settings", api_settings)
     return app
 
 
