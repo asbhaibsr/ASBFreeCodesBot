@@ -16,12 +16,14 @@ import os
 import random
 import re
 import time
+from collections import deque
 from datetime import date, datetime, timedelta, timezone
 from typing import Awaitable, Callable, Optional
 from urllib.parse import quote
 
-from aiogram import Bot, Dispatcher, F, Router
+from aiogram import BaseMiddleware, Bot, Dispatcher, F, Router
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.middlewares.base import BaseRequestMiddleware
 from aiogram.enums import ParseMode
 from aiogram.exceptions import (
     TelegramAPIError,
@@ -33,6 +35,7 @@ from aiogram.exceptions import (
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (
     CallbackQuery,
+    ErrorEvent,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     MenuButtonWebApp,
@@ -40,6 +43,7 @@ from aiogram.types import (
     User,
     WebAppInfo,
 )
+from aiogram.methods import AnswerCallbackQuery, CopyMessage, EditMessageText, SendMessage
 from pymongo import AsyncMongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
@@ -73,14 +77,14 @@ SUPPORT_USERNAME = os.getenv("SUPPORT_USERNAME", "@asbhaibsr")
 SUPPORT_LINK = f"https://t.me/{SUPPORT_USERNAME.lstrip('@')}"
 
 TASK_CHANNEL_LINK = os.getenv("TASK_CHANNEL_LINK", "https://t.me/asfreecodes")
-TASK_CHANNEL_ID = int(os.getenv("TASK_CHANNEL_ID", "-1002892671107"))
+TASK_CHANNEL_ID = int(os.getenv("TASK_CHANNEL_ID", "-1004474019310"))
 
 LOG_CHANNEL_LINK = os.getenv("LOG_CHANNEL_LINK", "https://t.me/+Te9_yU3XUQE4MTg1")
 LOG_CHANNEL_ID = int(os.getenv("LOG_CHANNEL_ID", "-1003099940809"))
 
 MAX_WRONG_ATTEMPTS = int(os.getenv("MAX_WRONG_ATTEMPTS", "3"))   # isse zyada galat => lock
 LOCK_HOURS = int(os.getenv("LOCK_HOURS", "24"))
-SEND_RATE = float(os.getenv("SEND_RATE", "20"))                  # messages / second (limit ~30)
+SEND_RATE = float(os.getenv("SEND_RATE", "25"))                  # messages / second (limit ~30)
 REQUIRE_JOIN = os.getenv("REQUIRE_JOIN", "false").lower() == "true"
 WINNER_NOTIFY = os.getenv("WINNER_NOTIFY", "entries").lower()    # "entries" ya "all"
 PORT = int(os.getenv("PORT", "8000"))
@@ -92,6 +96,19 @@ POST_WINNER_TO_CHANNEL = os.getenv("POST_WINNER_TO_CHANNEL", "true").lower() == 
 STREAK_REWARDS = {3: 1, 7: 2, 14: 3, 30: 5}                      # streak din -> bonus tickets
 DROP_TIMEOUT_MIN = float(os.getenv("DROP_TIMEOUT_MIN", "10"))     # live drop max kitni der chalega
 DROP_MAX_CODES = int(os.getenv("DROP_MAX_CODES", "50"))
+BULK_RATE = float(os.getenv("BULK_RATE", "12"))                    # broadcast/DM fan-out speed (msg/sec)
+LUCKY_WINDOW = int(os.getenv("LUCKY_WINDOW", "10"))                 # lucky drop join window (sec)
+STREAK_GRACE_DAYS = int(os.getenv("STREAK_GRACE_DAYS", "0"))        # 0 = sakht (ek din miss = streak reset)
+REFERRAL_REQUIRE_JOIN = os.getenv("REFERRAL_REQUIRE_JOIN", "true").lower() == "true"
+STREAK_REMIND_HOUR = int(os.getenv("STREAK_REMIND_HOUR", "20"))     # IST
+STREAK_REMIND_MIN = int(os.getenv("STREAK_REMIND_MIN", "5"))        # kam se kam itni streak par reminder
+STREAK_REMIND_MAX = int(os.getenv("STREAK_REMIND_MAX", "400"))
+MAX_CONCURRENT_UPDATES = int(os.getenv("MAX_CONCURRENT_UPDATES", "25"))
+MAX_QUEUE = int(os.getenv("MAX_QUEUE", "300"))
+USER_THROTTLE_SEC = float(os.getenv("USER_THROTTLE_SEC", "0.6"))
+MEM_ALERT_MB = float(os.getenv("MEM_ALERT_MB", "380"))
+LOAD_ALERT_PER_MIN = int(os.getenv("LOAD_ALERT_PER_MIN", "900"))
+ALERT_COOLDOWN_SEC = float(os.getenv("ALERT_COOLDOWN_SEC", "600"))
 MINIAPP_LINK = os.getenv("MINIAPP_LINK", "").strip()              # optional: https://t.me/ASBFreeCodesBot/app (BotFather /newapp)
 
 logging.basicConfig(
@@ -102,8 +119,22 @@ logger = logging.getLogger("asb-bot")
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
+# shared state (Mini App server bhi yahi dicts padhta hai)
+REWARD_CFG = {
+    "streak": [[20, 10], [50, 20], [100, 40], [200, 75]],
+    "refer": [[15, 10], [30, 20], [50, 35], [100, 70], [200, 150]],
+}
+STATUS = {"degraded": False, "msg": ""}
+NOTICE = {"text": ""}
+live_state = {"v": 0, "drop": None}
+
 # website ke liye shared context (db collections bot start hone par bharte hain)
 site_ctx = {
+    "live": live_state,
+    "status": STATUS,
+    "notice": NOTICE,
+    "reward_cfg": REWARD_CFG,
+    "hooks": {},
     "db": {},
     "actions": {},
     "bot_token": BOT_TOKEN,
@@ -113,6 +144,7 @@ site_ctx = {
         "channel_link": TASK_CHANNEL_LINK,
         "support_username": SUPPORT_USERNAME,
         "support_link": SUPPORT_LINK,
+        "lucky_window": LUCKY_WINDOW,
     },
 }
 
@@ -122,7 +154,7 @@ site_ctx = {
 bot: Bot = None  # type: ignore
 mongo: AsyncMongoClient = None  # type: ignore
 users = entries = states = config = winners = sponsors = sponsor_joins = None
-drops = drop_codes = drop_claims = None
+drops = drop_codes = drop_claims = rewards = None
 drop_tasks: dict = {}
 
 router = Router()
@@ -203,6 +235,24 @@ def ref_link(uid: int) -> str:
     return f"https://t.me/{BOT_USERNAME}?start=ref_{uid}"
 
 
+def video_label(url: str) -> str:
+    u = (url or "").lower()
+    if "youtu" in u:
+        return "▶️ YouTube par dekho"
+    if "instagram" in u:
+        return "📸 Instagram par dekho"
+    return "🔗 Video dekho"
+
+
+def video_post_text() -> str:
+    return (
+        "🎥 <b>Aaj ka Redeem Code is VIDEO ke andar hai!</b>\n\n"
+        "👇 Video dekho → code dhundo → bot me <b>Enter Code</b> dabake bhejo.\n"
+        "🎁 100% FREE — sahi code daalne walon ki entry hoti hai!\n\n"
+        "⚠️ Galat code baar-baar daaloge to 24 ghante ke liye lock lag jayega."
+    )
+
+
 def app_link() -> str:
     """Channel posts ke liye Mini App link (BotFather direct link ho to wahi, warna bot deep-link)."""
     return MINIAPP_LINK or f"https://t.me/{BOT_USERNAME}?start=drop"
@@ -247,9 +297,9 @@ def admin_kb() -> InlineKeyboardMarkup:
         [btn("➕ Add Giveaway Code", "adm:add")],
         [btn("🏆 Select Winner", "adm:winner")],
         [btn("📢 Broadcast", "adm:bc")],
-        [btn("🧹 Clear Junk", "adm:junk")],
-        [btn("⚡ Free Code Drop", "adm:drop")],
-        [btn("🤝 Sponsors", "adm:sponsors")],
+        [btn("⚡ Free Code Drop", "adm:drop"), btn("🤝 Sponsors", "adm:sponsors")],
+        [btn("📥 Reward Requests", "adm:rw"), btn("🎯 Reward Cards", "adm:rwcfg")],
+        [btn("📣 Notice", "adm:notice"), btn("🧹 Clear Junk", "adm:junk")],
     )
 
 
@@ -273,7 +323,7 @@ def welcome_text(name: str) -> str:
         "aur kabhi maange bhi nahi jayenge.\n\n"
         "📢 Bas hamara channel join karo, task poora karo aur "
         "<b>Redeem Codes jeeto</b> 🎉\n"
-        "📱 <b>Open App</b> me Daily Bonus, Refer & Earn, Leaderboard aur ⚡ <b>Free Code Drops</b> milte hain!\n\n"
+        "📱 <b>Open App</b> me Daily Bonus, Refer & Earn, 🎯 <b>Reward Cards (₹ redeem code)</b> aur ⚡ <b>Free Code Drops</b> milte hain!\n\n"
         "👇 Neeche ke buttons se shuru karein:"
     )
 
@@ -289,6 +339,7 @@ def help_text() -> str:
         "📱 <b>Open App</b> me:\n"
         f"• 👥 Refer & Earn: har verified dost = +{REFERRAL_TICKETS} ticket\n"
         "• 🎁 Daily Bonus: streak 3/7/14/30 din par extra tickets\n"
+        "• 🎯 Reward Cards: streak / refer poore karo, ₹ redeem code pao\n"
         "• ⚡ Free Code Drops: time par sabse pehle CLAIM karo\n"
         "• 🎟 Live entries, 🏆 winners aur 🏅 leaderboard\n\n"
         "⚠️ <b>Dhyan rahe:</b>\n"
@@ -340,14 +391,18 @@ def non_winner_text(winner_label: str) -> str:
 # ======================================================================
 async def init_db() -> None:
     global mongo, users, entries, states, config, winners, sponsors, sponsor_joins
-    global drops, drop_codes, drop_claims
-    mongo = AsyncMongoClient(MONGO_URI, tz_aware=True, serverSelectionTimeoutMS=20000)
+    global drops, drop_codes, drop_claims, rewards
+    mongo = AsyncMongoClient(
+        MONGO_URI, tz_aware=True, serverSelectionTimeoutMS=8000, connectTimeoutMS=8000, socketTimeoutMS=15000,
+        maxPoolSize=int(os.getenv("MONGO_POOL", "30")), minPoolSize=0, maxIdleTimeMS=60000, appName="asb-bot",
+    )
     await mongo.admin.command("ping")
     db = mongo[DB_NAME]
     users, entries, states = db["users"], db["entries"], db["states"]
     config, winners = db["config"], db["winners"]
     sponsors, sponsor_joins = db["sponsors"], db["sponsor_joins"]
     drops, drop_codes, drop_claims = db["drops"], db["drop_codes"], db["drop_claims"]
+    rewards = db["rewards"]
     await states.create_index("expires_at", expireAfterSeconds=0)  # TTL auto-clean
     await users.create_index("junk")
     await users.create_index([("ref_count", -1)])
@@ -355,15 +410,53 @@ async def init_db() -> None:
     await drop_codes.create_index([("drop", 1), ("claimed_by", 1)])
     await drop_claims.create_index([("drop", 1), ("rank", 1)])
     await drop_claims.create_index("uid")
+    await rewards.create_index([("uid", 1), ("earned_at", -1)])
+    await rewards.create_index([("status", 1), ("remind_at", 1)])
+    await users.create_index("streak")
+    cfg = await config.find_one({"_id": "reward_cfg"})
+    for k in ("streak", "refer"):
+        if cfg and cfg.get(k):
+            REWARD_CFG[k] = cfg[k]
+    nt = await config.find_one({"_id": "notice"})
+    NOTICE["text"] = (nt or {}).get("text", "")
     site_ctx["db"].update(
         users=users, entries=entries, config=config, winners=winners, sponsors=sponsors,
-        drops=drops, drop_claims=drop_claims,
+        drops=drops, drop_claims=drop_claims, rewards=rewards,
     )
     logger.info("MongoDB connected ✅  (db=%s)", DB_NAME)
 
 
-async def touch_user(u: User) -> bool:
-    """User ko save/update karo. True return = bilkul naya user."""
+_ucache: dict = {}
+_touched: dict = {}
+UCACHE_TTL = 120.0
+
+
+async def get_user_cached(uid: int) -> Optional[dict]:
+    """User ke zaroori fields (2 min cache) — DB hits kam karne ke liye."""
+    now = time.monotonic()
+    hit = _ucache.get(uid)
+    if hit and now - hit[0] < UCACHE_TTL:
+        return hit[1]
+    u = await users.find_one(
+        {"_id": uid}, {"name": 1, "username": 1, "verified": 1, "banned": 1, "ref_by": 1, "ref_credited": 1}
+    )
+    if len(_ucache) > 20000:
+        _ucache.clear()
+    if u:
+        _ucache[uid] = (now, u)
+    return u
+
+
+def invalidate_user(uid: int) -> None:
+    _ucache.pop(uid, None)
+    _touched.pop(uid, None)
+
+
+async def touch_user(u: User, force: bool = False) -> bool:
+    """User ko save/update karo (10 min me ek baar hi DB write). True = bilkul naya user."""
+    now = time.monotonic()
+    if not force and now - _touched.get(u.id, -1e9) < 600:
+        return False
     res = await users.update_one(
         {"_id": u.id},
         {
@@ -386,6 +479,9 @@ async def touch_user(u: User) -> bool:
         },
         upsert=True,
     )
+    if len(_touched) > 50000:
+        _touched.clear()
+    _touched[u.id] = now
     return res.upserted_id is not None
 
 
@@ -394,7 +490,7 @@ async def mark_junk(uid: int) -> None:
 
 
 async def is_verified(uid: int) -> bool:
-    u = await users.find_one({"_id": uid}, {"verified": 1})
+    u = await get_user_cached(uid)
     return bool(u and u.get("verified"))
 
 
@@ -499,13 +595,13 @@ class RateLimiter:
         self._pause_until = max(self._pause_until, time.monotonic() + seconds)
 
 
-limiter = RateLimiter(SEND_RATE)
+limiter = RateLimiter(SEND_RATE)          # saare outgoing messages (middleware)
+bulk_limiter = RateLimiter(BULK_RATE)     # broadcast / DM fan-out (interactive replies ko jagah milti hai)
 
 
 async def deliver_result(uid: int, sender: Callable[[int], Awaitable]) -> tuple:
     """Ek message safely bhejta hai. Returns (OK/JUNK/FAIL, telegram result)."""
     for _ in range(6):
-        await limiter.wait()
         try:
             return OK, await sender(uid)
         except TelegramRetryAfter as e:
@@ -535,6 +631,7 @@ async def deliver(uid: int, sender: Callable[[int], Awaitable]) -> str:
 async def run_broadcast(uids: list, sender: Callable[[int], Awaitable], on_progress=None) -> dict:
     stats = {"total": len(uids), "sent": 0, "junk": 0, "failed": 0}
     for i, uid in enumerate(uids, 1):
+        await bulk_limiter.wait()
         res = await deliver(uid, sender)
         if res == OK:
             stats["sent"] += 1
@@ -585,6 +682,178 @@ async def safe_edit(cb: CallbackQuery, text: str, markup: Optional[InlineKeyboar
         if "not modified" in str(e).lower():
             return
         await bot.send_message(cb.from_user.id, text, reply_markup=markup)
+
+
+# ======================================================================
+#  LOAD PROTECTION + ADMIN ALERTS  (free tier par bhi hang na ho)
+# ======================================================================
+metrics = {"updates": 0, "shed": 0, "errors": 0, "flood": 0}
+_alert_last: dict = {}
+_alert_skipped: dict = {}
+
+
+async def alert_admin(key: str, text: str, cooldown: Optional[float] = None) -> None:
+    """Admin ko Telegram par alert. Same type ka alert cooldown ke andar dobara nahi jata."""
+    if bot is None:
+        return
+    cd = ALERT_COOLDOWN_SEC if cooldown is None else cooldown
+    now = time.monotonic()
+    if now - _alert_last.get(key, -1e9) < cd:
+        _alert_skipped[key] = _alert_skipped.get(key, 0) + 1
+        return
+    _alert_last[key] = now
+    extra = _alert_skipped.pop(key, 0)
+    if extra:
+        text += f"\n\n(+{extra} baar aur hua is dauran)"
+    try:
+        await bot.send_message(ADMIN_ID, text)
+    except Exception as e:  # alert fail hone se kuch nahi rukna chahiye
+        logger.warning("alert_admin fail: %s", e)
+
+
+def note_flood(seconds: int) -> None:
+    metrics["flood"] += 1
+    if seconds >= 10:
+        spawn(alert_admin("flood", f"⚠️ <b>Telegram FloodWait</b> — sending {seconds}s ke liye slow ki gayi (traffic zyada hai)."))
+
+
+PACED_METHODS = (SendMessage, CopyMessage, EditMessageText)
+
+
+class PacedRequests(BaseRequestMiddleware):
+    """Saare outgoing messages ko ek global speed par nikalta hai + FloodWait par auto-retry."""
+
+    async def __call__(self, make_request, bot, method):
+        paced = isinstance(method, PACED_METHODS)
+        for attempt in range(4):
+            if paced:
+                await limiter.wait()
+            try:
+                return await make_request(bot, method)
+            except TelegramRetryAfter as e:
+                wait = int(e.retry_after) + 1
+                note_flood(wait)
+                if isinstance(method, AnswerCallbackQuery) or attempt == 3:
+                    raise
+                if paced:
+                    limiter.pause(wait)
+                else:
+                    await asyncio.sleep(wait)
+
+
+class LoadGuard(BaseMiddleware):
+    """Ek saath bahut updates aaye to bot hang na ho: concurrency cap + spam throttle + load shedding."""
+
+    def __init__(self) -> None:
+        self.sem = asyncio.Semaphore(MAX_CONCURRENT_UPDATES)
+        self.inflight = 0
+        self.last: dict = {}
+
+    @staticmethod
+    def _user(update):
+        if getattr(update, "callback_query", None):
+            return update.callback_query.from_user
+        if getattr(update, "message", None):
+            return update.message.from_user
+        return None
+
+    async def __call__(self, handler, event, data):
+        metrics["updates"] += 1
+        user = self._user(event)
+        if user and user.id != ADMIN_ID:
+            now = time.monotonic()
+            if now - self.last.get(user.id, -1e9) < USER_THROTTLE_SEC:
+                return None  # button-mashing / spam ignore
+            if len(self.last) > 50000:
+                self.last.clear()
+            self.last[user.id] = now
+        if self.inflight >= MAX_QUEUE:
+            metrics["shed"] += 1
+            spawn(alert_admin("overload", "🚨 <b>Bot par bahut zyada load hai</b> — kuch requests skip ho rahi hain. Traffic kam hote hi normal ho jayega."))
+            cbq = getattr(event, "callback_query", None)
+            if cbq:
+                try:
+                    await cbq.answer("⏳ Bahut zyada traffic hai — 1 minute baad try karein 🙏", show_alert=True)
+                except Exception:
+                    pass
+            return None
+        self.inflight += 1
+        try:
+            async with self.sem:
+                return await handler(event, data)
+        finally:
+            self.inflight -= 1
+
+
+def rss_mb() -> float:
+    try:
+        with open("/proc/self/status") as f:
+            for line in f:
+                if line.startswith("VmRSS:"):
+                    return int(line.split()[1]) / 1024
+    except Exception:
+        pass
+    return 0.0
+
+
+async def monitor_loop() -> None:
+    """Har 10s event-loop lag, har ~1 min DB ping / memory / traffic check; dikkat par admin ko alert."""
+    last = time.monotonic()
+    ticks = bad_db = lag_bad = 0
+    down = False
+    while True:
+        await asyncio.sleep(10)
+        now = time.monotonic()
+        lag = now - last - 10
+        last = now
+        ticks += 1
+        lag_bad = lag_bad + 1 if lag > 3 else 0
+        if lag_bad >= 2:
+            spawn(alert_admin("lag", f"🐢 <b>Bot slow chal raha hai</b> (lag {lag:.1f}s) — server par load zyada ho sakta hai."))
+        if ticks % 6:
+            continue
+        try:
+            await asyncio.wait_for(mongo.admin.command("ping"), 8)
+            bad_db = 0
+            if down:
+                down = False
+                STATUS.update(degraded=False, msg="")
+                spawn(alert_admin("db_up", "🟢 <b>Database wapas OK</b> — bot normal chal raha hai.", cooldown=0))
+        except Exception:
+            bad_db += 1
+            if bad_db >= 2 and not down:
+                down = True
+                STATUS.update(degraded=True, msg="Technical dikkat chal rahi hai — thodi der baad try karein 🙏")
+                spawn(alert_admin("db_down", "🔴 <b>Database connect nahi ho raha!</b>\nUsers ko 'thodi der baad try karein' dikh raha hai. MongoDB Atlas / network check karein.", cooldown=0))
+        ups, metrics["updates"] = metrics["updates"], 0
+        if ups > LOAD_ALERT_PER_MIN:
+            spawn(alert_admin("load", f"📈 <b>Traffic zyada hai</b>: ~{ups} requests/min. Bot protection mode me chal raha hai."))
+        mem = rss_mb()
+        if mem > MEM_ALERT_MB:
+            spawn(alert_admin("mem", f"🧠 <b>Memory zyada</b>: {mem:.0f} MB (free limit 512 MB). Restart ho sakta hai.", cooldown=1800))
+
+
+@router.errors()
+async def on_error(event: ErrorEvent):
+    exc = event.exception
+    metrics["errors"] += 1
+    logger.error("Handler error: %r", exc, exc_info=exc)
+    spawn(
+        alert_admin(
+            f"err:{type(exc).__name__}",
+            f"⚠️ <b>Bot error</b>\n<code>{esc(type(exc).__name__)}</code>: {esc(str(exc))[:300]}",
+            cooldown=300,
+        )
+    )
+    upd = event.update
+    try:
+        if upd.callback_query:
+            await upd.callback_query.answer("⚠️ Abhi thodi dikkat hai — kuch der baad try karein 🙏", show_alert=True)
+        elif upd.message:
+            await upd.message.answer("⚠️ Abhi thodi technical dikkat hai. Kuch der baad dobara try karein 🙏\nAdmin ko khabar mil gayi hai.")
+    except Exception:
+        pass
+    return True
 
 
 # ======================================================================
@@ -654,8 +923,11 @@ async def send_captcha(uid: int, cb: Optional[CallbackQuery] = None, note: str =
         await bot.send_message(uid, text, reply_markup=markup)
 
 
+_ref_burst: dict = {}
+
+
 async def credit_referral(uid: int) -> None:
-    """Verified hote hi referrer ko ticket (sirf ek baar)."""
+    """Verified + channel-join hote hi referrer ko ticket + reward-card progress (sirf ek baar)."""
     doc = await users.find_one_and_update(
         {"_id": uid, "ref_by": {"$ne": None}, "ref_credited": {"$ne": True}},
         {"$set": {"ref_credited": True}},
@@ -663,16 +935,53 @@ async def credit_referral(uid: int) -> None:
     if not doc:
         return
     ref = doc["ref_by"]
-    await users.update_one({"_id": ref}, {"$inc": {"ref_count": 1}})
+    ru = await users.find_one_and_update(
+        {"_id": ref}, {"$inc": {"ref_count": 1, "ref_cycle_count": 1}}, return_document=ReturnDocument.AFTER
+    )
+    if ru:
+        cnt, cycle = int(ru.get("ref_cycle_count", 1)), int(ru.get("ref_cycle", 1))
+        card = await grant_card(ref, "refer", cycle, cnt)
+        if card:
+            spawn(notify_card_earned(ref, card))
+        if cnt >= max(t for t, _ in REWARD_CFG["refer"]):  # cycle poora -> fresh start
+            await users.update_one({"_id": ref}, {"$set": {"ref_cycle_count": 0, "ref_cycle": cycle + 1}})
+        dq = _ref_burst.setdefault(ref, deque(maxlen=20))
+        dq.append(time.monotonic())
+        recent = [t for t in dq if time.monotonic() - t < 600]
+        if len(recent) >= 8:  # fraud flag
+            await users.update_one({"_id": ref}, {"$set": {"ref_flag": True}})
+            spawn(alert_admin(
+                f"refburst:{ref}",
+                f"⚠️ <b>Referral burst</b>: {mention(ref, ru.get('name'))} (<code>{ref}</code>) ke 10 min me {len(recent)} referrals!\n"
+                f"Check karein. Ban: <code>/ban {ref}</code>",
+                cooldown=1800,
+            ))
     await add_tickets(ref, REFERRAL_TICKETS)
+    site_invalidate(ref)
     await deliver(
         ref,
         lambda cid: bot.send_message(
             cid,
             f"🎉 <b>{esc(mask_name(doc.get('name')))}</b> aapke link se join hua aur verify ho gaya!\n"
-            f"🎟 Aapko <b>+{REFERRAL_TICKETS} ticket</b> mila.",
+            f"🎟 Aapko <b>+{REFERRAL_TICKETS} ticket</b> mila + referral card progress badha 🎯",
         ),
     )
+
+
+async def maybe_credit_referral(uid: int) -> str:
+    """Referral tabhi gina jata hai jab dost verify kare AUR task channel join kare."""
+    u = await get_user_cached(uid)
+    if not u or not u.get("ref_by") or u.get("ref_credited"):
+        return "none"
+    fresh = await users.find_one({"_id": uid}, {"ref_by": 1, "ref_credited": 1, "verified": 1})
+    if not fresh or not fresh.get("ref_by") or fresh.get("ref_credited") or not fresh.get("verified"):
+        invalidate_user(uid)
+        return "none"
+    if REFERRAL_REQUIRE_JOIN and await is_member(TASK_CHANNEL_ID, uid) is False:
+        return "need_join"
+    await credit_referral(uid)
+    invalidate_user(uid)
+    return "credited"
 
 
 # ======================================================================
@@ -681,7 +990,7 @@ async def credit_referral(uid: int) -> None:
 @router.message(CommandStart())
 async def cmd_start(m: Message, command: CommandObject):
     uid = m.from_user.id
-    is_new = await touch_user(m.from_user)
+    is_new = await touch_user(m.from_user, force=True)
     await clear_state(uid)
 
     args = (command.args or "").strip()
@@ -692,6 +1001,7 @@ async def cmd_start(m: Message, command: CommandObject):
             ref = 0
         if ref and ref != uid and await users.find_one({"_id": ref}, {"_id": 1}):
             await users.update_one({"_id": uid}, {"$set": {"ref_by": ref}})
+            invalidate_user(uid)
 
     await m.answer(welcome_text(m.from_user.first_name), reply_markup=await user_menu(uid))
     if args in ("drop", "app"):
@@ -699,6 +1009,8 @@ async def cmd_start(m: Message, command: CommandObject):
             "⚡ <b>Free Code Drops</b> aur baaki sab features ke liye App kholein 👇",
             reply_markup=kb([btn("📱 Open App", web_app=WEBSITE_URL)]),
         )
+    if args == "code":
+        await enter_code_flow(m.from_user)
 
 
 @router.message(Command("cancel"))
@@ -758,20 +1070,30 @@ async def cb_captcha(cb: CallbackQuery):
     await clear_state(uid)
     await touch_user(cb.from_user)
     await users.update_one({"_id": uid}, {"$set": {"verified": True, "verified_at": now_utc()}})
-    await credit_referral(uid)
+    invalidate_user(uid)
+    res = await maybe_credit_referral(uid)
     await safe_edit(
         cb,
         "✅ <b>Verification complete!</b>\n\nAb aap Enter Code, Daily Bonus aur Refer & Earn use kar sakte hain 🎉",
         await user_menu(uid),
     )
+    if res == "need_join":
+        await bot.send_message(
+            uid,
+            "📢 <b>Ek kaam baaki!</b> Hamara channel join karein — tabhi aapke dost ko reward milega.",
+            reply_markup=kb([btn("📢 Join Channel", url=TASK_CHANNEL_LINK)], [btn("✅ Join kar liya", "refcheck")]),
+        )
 
 
 # ---------------------------------------------------------------- enter code
-@router.callback_query(F.data == "enter_code")
-async def cb_enter_code(cb: CallbackQuery):
-    uid = cb.from_user.id
-    await cb.answer()
-    await touch_user(cb.from_user)
+async def enter_code_flow(user: User) -> None:
+    uid = user.id
+    await touch_user(user)
+    u = await get_user_cached(uid)
+    if u and u.get("banned"):
+        await bot.send_message(uid, f"🚫 Aapka account restricted hai. Support: {esc(SUPPORT_USERNAME)}")
+        return
+    await maybe_credit_referral(uid)  # pending referral (channel join ke baad) credit
 
     # 1) pehle hi code daal chuka hai?
     if await has_entered(uid):
@@ -830,8 +1152,20 @@ async def cb_enter_code(cb: CallbackQuery):
         )
         return
 
+    video = gw.get("video_url")
     await set_state(uid, "await_code", ttl_min=10)
-    await bot.send_message(uid, "🔑 <b>Apna code ab yahan bhejein</b> 👇\n\n(Cancel karne ke liye /cancel)")
+    await bot.send_message(
+        uid,
+        "🔑 <b>Apna code ab yahan bhejein</b> 👇\n\n(Cancel karne ke liye /cancel)"
+        + ("\n\n🎥 Code is video me hai — dekhne ke liye neeche button dabayein." if video else ""),
+        reply_markup=kb([btn(video_label(video), url=video)]) if video else None,
+    )
+
+
+@router.callback_query(F.data == "enter_code")
+async def cb_enter_code(cb: CallbackQuery):
+    await cb.answer()
+    await enter_code_flow(cb.from_user)
 
 
 async def handle_code(m: Message) -> None:
@@ -956,8 +1290,11 @@ async def wrong_code(m: Message) -> None:
 # ---------------------------------------------------------------- daily bonus
 async def daily_core(uid: int) -> dict:
     """Daily bonus claim — bot aur Mini App dono yahi use karte hain."""
-    if not await is_verified(uid):
+    u0 = await get_user_cached(uid)
+    if not u0 or not u0.get("verified"):
         return {"status": "unverified"}
+    if u0.get("banned"):
+        return {"status": "banned"}
     today = today_ist()
     prev = await users.find_one_and_update(
         {"_id": uid, "last_claim": {"$ne": today}}, {"$set": {"last_claim": today}}
@@ -966,16 +1303,29 @@ async def daily_core(uid: int) -> dict:
         u = await users.find_one({"_id": uid}) or {}
         return {"status": "already", "streak": u.get("streak", 0), "best": u.get("best_streak", 0)}
 
-    yesterday = (date.fromisoformat(today) - timedelta(days=1)).isoformat()
-    streak = prev.get("streak", 0) + 1 if prev.get("last_claim") == yesterday else 1
+    last = prev.get("last_claim")
+    try:
+        gap = (date.fromisoformat(today) - date.fromisoformat(last)).days if last else None
+    except ValueError:
+        gap = None
+    streak = prev.get("streak", 0) + 1 if gap is not None and 1 <= gap <= 1 + STREAK_GRACE_DAYS else 1
     best = max(prev.get("best_streak", 0), streak)
-    await users.update_one({"_id": uid}, {"$set": {"streak": streak, "best_streak": best}})
+    cycle = int(prev.get("streak_cycle", 1))
+    upd = {"streak": streak, "best_streak": best}
+    reset = streak >= max(t for t, _ in REWARD_CFG["streak"])
+    if reset:  # top milestone poora -> fresh cycle
+        upd.update(streak=0, streak_cycle=cycle + 1)
+    await users.update_one({"_id": uid}, {"$set": upd})
+    card = await grant_card(uid, "streak", cycle, streak)
+    if card:
+        spawn(notify_card_earned(uid, card))
     reward = STREAK_REWARDS.get(streak, 0)
     if reward:
         await add_tickets(uid, reward)
     nxt = next((d for d in sorted(STREAK_REWARDS) if d > streak), None)
+    site_invalidate(uid)
     return {
-        "status": "ok", "streak": streak, "best": best, "reward": reward,
+        "status": "ok", "streak": streak, "best": best, "reward": reward, "card": card, "cycle_reset": reset,
         "next_day": nxt, "next_reward": STREAK_REWARDS.get(nxt) if nxt else None,
     }
 
@@ -988,6 +1338,9 @@ async def cb_daily(cb: CallbackQuery):
     r = await daily_core(uid)
     if r["status"] == "unverified":
         await send_captcha(uid, note="Daily Bonus ke liye pehle verification zaroori hai.\n\n")
+        return
+    if r["status"] == "banned":
+        await bot.send_message(uid, f"🚫 Aapka account restricted hai. Support: {esc(SUPPORT_USERNAME)}")
         return
     if r["status"] == "already":
         await bot.send_message(
@@ -1009,11 +1362,12 @@ async def cb_daily(cb: CallbackQuery):
         if nxt
         else "🏆 Aapne sabhi milestones paar kar liye!"
     )
+    card_line = f"\n🎁 <b>Reward Card unlock: ₹{r['card']['amount']}!</b> App → Rewards me Redeem karein." if r.get("card") else ""
     await bot.send_message(
         uid,
         "🎁 <b>Daily Bonus Claimed!</b>\n\n"
         f"🔥 Streak: <b>{streak} din</b> (best: {best})\n"
-        f"{reward_line}\n{next_line}\n\n"
+        f"{reward_line}\n{next_line}{card_line}\n\n"
         "Kal wapas aana — streak toot jayegi agar ek din miss hua!",
         reply_markup=back_kb(),
     )
@@ -1090,6 +1444,34 @@ async def cmd_admin(m: Message):
     await m.answer(ADMIN_HOME_TEXT, reply_markup=admin_kb())
 
 
+@router.message(Command("ban"))
+async def cmd_ban(m: Message, command: CommandObject):
+    if not is_admin(m.from_user.id):
+        return
+    try:
+        uid = int((command.args or "").split()[0])
+    except (ValueError, IndexError):
+        await m.answer("Use: <code>/ban 123456789</code>")
+        return
+    res = await users.update_one({"_id": uid}, {"$set": {"banned": True}})
+    invalidate_user(uid)
+    await m.answer(f"🚫 <code>{uid}</code> ban ho gaya." if res.matched_count else "⚠️ Ye user database me nahi mila.")
+
+
+@router.message(Command("unban"))
+async def cmd_unban(m: Message, command: CommandObject):
+    if not is_admin(m.from_user.id):
+        return
+    try:
+        uid = int((command.args or "").split()[0])
+    except (ValueError, IndexError):
+        await m.answer("Use: <code>/unban 123456789</code>")
+        return
+    res = await users.update_one({"_id": uid}, {"$set": {"banned": False}})
+    invalidate_user(uid)
+    await m.answer(f"✅ <code>{uid}</code> unban ho gaya." if res.matched_count else "⚠️ Ye user database me nahi mila.")
+
+
 async def render_sponsors(cb: CallbackQuery) -> None:
     rows = [s async for s in sponsors.find({})]
     lines, buttons = [], []
@@ -1144,6 +1526,8 @@ async def cb_admin(cb: CallbackQuery):
         n_refs = await users.count_documents({"ref_credited": True})
         n_sp = await sponsors.count_documents({})
         n_sp_joins = await sponsor_joins.count_documents({})
+        n_rw = await rewards.count_documents({"status": "requested"})
+        n_ban = await users.count_documents({"banned": True})
         gw = await get_giveaway()
         if gw:
             status = "🔄 Winner process chal raha hai" if gw.get("closing") else "🟢 Active"
@@ -1161,7 +1545,10 @@ async def cb_admin(cb: CallbackQuery):
             f"🎟 Current Entries: <b>{n_entries}</b>\n"
             f"👥 Referrals (credited): <b>{n_refs}</b>\n"
             f"🤝 Sponsors: <b>{n_sp}</b> (verified members: {n_sp_joins})\n"
-            f"🏆 Winners Declared: <b>{n_winners}</b>\n\n"
+            f"🏆 Winners Declared: <b>{n_winners}</b>\n"
+            f"🎯 Reward requests pending: <b>{n_rw}</b>\n"
+            f"🚫 Banned: <b>{n_ban}</b>\n"
+            f"{'⚠️ Degraded mode ON' if STATUS['degraded'] else '🟢 Bot healthy'}\n\n"
             f"🎁 <b>Giveaway:</b> {gw_line}",
             admin_back_kb(),
         )
@@ -1175,7 +1562,7 @@ async def cb_admin(cb: CallbackQuery):
         await safe_edit(
             cb,
             "➕ <b>Add Giveaway Code</b>\n\n"
-            "Step 1/2 — Naya <b>giveaway code</b> bhejein "
+            "Step 1/3 — Naya <b>giveaway code</b> bhejein "
             "(jo users ko sahi link se milega):",
             admin_cancel_kb(),
         )
@@ -1292,7 +1679,91 @@ async def cb_admin(cb: CallbackQuery):
             await users.delete_many({"_id": {"$in": ids}})
             await entries.delete_many({"_id": {"$in": ids}})
             await states.delete_many({"_id": {"$in": ids}})
+            for i in ids:
+                invalidate_user(i)
         await safe_edit(cb, f"✅ <b>{len(ids)}</b> junk users permanently remove ho gaye.", admin_back_kb())
+
+    # ---------------------------------------------------------- giveaway video skip
+    elif action == "add_skipvid":
+        st = await get_state(ADMIN_ID)
+        if not st or st["name"] != "admin_add_video":
+            await safe_edit(cb, "⌛ Session expire ho gaya. Dobara Add Giveaway Code karein.", admin_back_kb())
+            return
+        await set_state(ADMIN_ID, "admin_add_msg", {"code": st["data"]["code"], "video": None})
+        await safe_edit(cb, ADD_MSG_PROMPT, admin_cancel_kb())
+
+    # ---------------------------------------------------------- rewards (admin)
+    elif action == "rw":
+        pend = [r async for r in rewards.find({"status": "requested"}).sort("deadline", 1).limit(8)]
+        total = await rewards.count_documents({"status": "requested"})
+        if not pend:
+            await safe_edit(cb, "📥 <b>Reward Requests</b>\n\nAbhi koi pending request nahi ✅", admin_back_kb())
+            return
+        lines, rows = [], []
+        for r in pend:
+            left = r["deadline"] - now_utc()
+            t = fmt_td(left) if left.total_seconds() > 0 else "⚠️ late"
+            lines.append(f"• <code>{r['uid']}</code> — ₹{r['amount']} ({TRACKS[r['track']][0]} {r['target']}) — {t}")
+            rows.append([btn(f"₹{r['amount']} · {r['uid']}", f"rw:view:{r['_id']}")])
+        rows.append([btn("⬅️ Admin Panel", "adm:home")])
+        await safe_edit(
+            cb,
+            f"📥 <b>Reward Requests</b> — pending: <b>{total}</b>\n\n" + "\n".join(lines)
+            + "\n\nCard kholne ke liye neeche tap karein 👇",
+            kb(*rows),
+        )
+
+    elif action == "rwcfg":
+        await safe_edit(
+            cb,
+            "🎯 <b>Reward Cards</b>\n\n"
+            f"🔥 <b>Streak:</b> {cards_text('streak')}\n"
+            f"👥 <b>Refer:</b> {cards_text('refer')}\n\n"
+            "Cycle poora (sabse bada target) hone par count 0 se dobara shuru hota hai.\n"
+            "Badlaav sirf aage ke cards par lagta hai.",
+            kb(
+                [btn("✏️ Streak edit", "adm:rwcfg_edit:streak"), btn("✏️ Refer edit", "adm:rwcfg_edit:refer")],
+                [btn("⬅️ Admin Panel", "adm:home")],
+            ),
+        )
+
+    elif action.startswith("rwcfg_edit:"):
+        track = action.split(":", 1)[1]
+        if track not in TRACKS:
+            return
+        await set_state(ADMIN_ID, f"admin_rwcfg_{track}")
+        await safe_edit(
+            cb,
+            f"✏️ <b>{TRACKS[track][0]} cards edit</b>\n\nFormat: <code>target:₹amount, target:₹amount</code>\n"
+            "Jaise: <code>20:10, 50:20, 100:40, 200:75</code>\n(targets chhote se bade, max 8)\n\n"
+            f"Abhi: {cards_text(track)}",
+            admin_cancel_kb(),
+        )
+
+    # ---------------------------------------------------------- notice (Mini App banner)
+    elif action == "notice":
+        cur = NOTICE["text"]
+        await safe_edit(
+            cb,
+            "📣 <b>Mini App Notice</b>\n\n"
+            + (f"Abhi chal raha hai:\n<i>{esc(cur)}</i>" if cur else "Abhi koi notice nahi hai.")
+            + "\n\nYe notice Mini App ke upar sabko dikhta hai (maintenance / update / offer ke liye).",
+            kb(
+                [btn("✏️ Set Notice", "adm:notice_set")],
+                [btn("🗑 Clear Notice", "adm:notice_clear")],
+                [btn("⬅️ Admin Panel", "adm:home")],
+            ),
+        )
+
+    elif action == "notice_set":
+        await set_state(ADMIN_ID, "admin_notice")
+        await safe_edit(cb, "✏️ Notice ka text bhejein (max 200 characters):", admin_cancel_kb())
+
+    elif action == "notice_clear":
+        NOTICE["text"] = ""
+        await config.delete_one({"_id": "notice"})
+        live_state["v"] += 1
+        await safe_edit(cb, "✅ Notice hata diya gaya.", admin_back_kb())
 
     # ---------------------------------------------------------- free code drop
     elif action == "drop":
@@ -1306,8 +1777,8 @@ async def cb_admin(cb: CallbackQuery):
         await safe_edit(
             cb,
             "⚡ <b>New Free Code Drop</b>\n\n"
-            "Step 1/3 — <b>Redeem codes</b> bhejein, <b>har line me ek code</b>.\n"
-            f"Jitni lines, utne log claim kar payenge (max {DROP_MAX_CODES}).",
+            "Step 1/4 — <b>Redeem codes</b> bhejein, <b>har line me ek code</b>.\n"
+            f"Jitni lines, utne log jeet payenge (max {DROP_MAX_CODES}).",
             admin_cancel_kb(),
         )
 
@@ -1320,7 +1791,16 @@ async def cb_admin(cb: CallbackQuery):
             minutes = int(action.split(":", 1)[1])
         except ValueError:
             return
-        text, markup = await drop_label_prompt(st["data"]["codes"], now_utc() + timedelta(minutes=minutes))
+        text, markup = await drop_mode_prompt(st["data"]["codes"], now_utc() + timedelta(minutes=minutes))
+        await safe_edit(cb, text, markup)
+
+    elif action.startswith("drop_m:"):
+        st = await get_state(ADMIN_ID)
+        if not st or st["name"] != "admin_drop_mode":
+            await safe_edit(cb, "⌛ Session expire ho gaya. Dobara New Drop try karein.", admin_back_kb())
+            return
+        mode = "lucky" if action.endswith("lucky") else "fast"
+        text, markup = await drop_label_prompt(st["data"], mode)
         await safe_edit(cb, text, markup)
 
     elif action == "drop_skip":
@@ -1345,12 +1825,12 @@ async def cb_admin(cb: CallbackQuery):
             await safe_edit(cb, "⚠️ Ek drop pehle se active hai.", admin_back_kb())
             return
         await clear_state(ADMIN_ID)
-        no = await create_drop(list(data["codes"]), go_live_at, data["label"])
+        no = await create_drop(list(data["codes"]), go_live_at, data["label"], data.get("mode", "fast"))
         if no is None:
             await safe_edit(
                 cb,
                 "❌ Teaser channel par post nahi ho paya. Bot ko task channel me <b>Admin</b> banayein "
-                "(post + edit + pin permission) aur dobara try karein.",
+                "(post + pin permission) aur dobara try karein.",
                 admin_back_kb(),
             )
             return
@@ -1401,6 +1881,12 @@ async def cb_admin(cb: CallbackQuery):
 # ======================================================================
 #  ADMIN: STEP-BY-STEP INPUTS (state machine)
 # ======================================================================
+ADD_MSG_PROMPT = (
+    "Step 3/3 — Ab <b>custom admin message</b> bhejein jo sahi code daalne par "
+    "user ko DM me jayega (bold/italic/link formatting chalegi):"
+)
+
+
 async def handle_admin_state(m: Message, st: dict) -> None:
     name, data = st["name"], st.get("data", {})
 
@@ -1410,15 +1896,24 @@ async def handle_admin_state(m: Message, st: dict) -> None:
             await m.answer("⚠️ Code text me bhejein.")
             return
         code = m.text.strip()
-        await set_state(ADMIN_ID, "admin_add_msg", {"code": code})
+        await set_state(ADMIN_ID, "admin_add_video", {"code": code})
         await m.answer(
             f"✅ Code mil gaya: <code>{esc(code)}</code>\n\n"
-            "Step 2/2 — Ab <b>custom admin message</b> bhejein jo sahi code daalne par "
-            "user ko DM me jayega (bold/italic/link formatting chalegi):",
-            reply_markup=admin_cancel_kb(),
+            "Step 2/3 — 🎥 <b>Video link</b> bhejein (YouTube / Instagram) jisme code diya gaya hai.\n"
+            "Bot channel par ek achhi post bana dega. Video nahi hai to <b>Skip</b> dabayein.",
+            reply_markup=kb([btn("⏭ Skip (bina video)", "adm:add_skipvid")], [btn("❌ Cancel", "adm:home")]),
         )
 
-    # ---- Add Giveaway Code: step 2 (admin message)
+    # ---- Add Giveaway Code: step 2 (video link)
+    elif name == "admin_add_video":
+        url = (m.text or "").strip()
+        if not url.lower().startswith(("http://", "https://")) or " " in url or len(url) > 300:
+            await m.answer("⚠️ Valid http(s) video link bhejein, ya Skip dabayein.")
+            return
+        await set_state(ADMIN_ID, "admin_add_msg", {"code": data["code"], "video": url})
+        await m.answer("✅ Video link mil gaya.\n\n" + ADD_MSG_PROMPT, reply_markup=admin_cancel_kb())
+
+    # ---- Add Giveaway Code: step 3 (admin message)
     elif name == "admin_add_msg":
         if not m.text:
             await m.answer("⚠️ Message text me bhejein.")
@@ -1426,23 +1921,41 @@ async def handle_admin_state(m: Message, st: dict) -> None:
         if broadcast_lock.locked():
             await m.answer("⏳ Abhi ek process chal raha hai, thodi der baad try karein.")
             return
+        video = data.get("video")
         await config.replace_one(
             {"_id": "giveaway"},
             {
                 "_id": "giveaway",
                 "code": data["code"],
                 "admin_message": m.html_text,
+                "video_url": video,
                 "created_at": now_utc(),
                 "closing": False,
             },
             upsert=True,
         )
+        live_state["v"] += 1
         await clear_state(ADMIN_ID)
         n = await entries.count_documents({})
+        post_line = ""
+        if video:  # channel par video-code post
+            pst = await deliver(
+                TASK_CHANNEL_ID,
+                lambda cid: bot.send_message(
+                    cid,
+                    video_post_text(),
+                    reply_markup=kb(
+                        [btn(video_label(video), url=video)],
+                        [btn("🔑 Enter Code", url=f"https://t.me/{BOT_USERNAME}?start=code")],
+                    ),
+                ),
+            )
+            post_line = "\n📣 Channel video post: " + ("✅ ho gayi" if pst == OK else "⚠️ nahi gayi (bot ko channel me admin banayein)")
         await m.answer(
             "✅ <b>Giveaway set ho gaya!</b>\n\n"
             f"🔑 Code: <code>{esc(data['code'])}</code>\n"
-            f"🎟 Maujooda entries: <b>{n}</b>\n\n"
+            f"🎥 Video: {esc(video) if video else '— (skip)'}\n"
+            f"🎟 Maujooda entries: <b>{n}</b>{post_line}\n\n"
             "📩 <b>Admin message preview:</b>\n\n" + m.html_text,
             reply_markup=admin_back_kb(),
         )
@@ -1547,7 +2060,7 @@ async def handle_admin_state(m: Message, st: dict) -> None:
         await set_state(ADMIN_ID, "admin_drop_time", {"codes": codes}, ttl_min=30)
         await m.answer(
             f"✅ <b>{len(codes)}</b> code(s) mil gaye.\n\n"
-            "Step 2/3 — Drop <b>kab live</b> hoga? Button dabayein ya type karein:\n"
+            "Step 2/4 — Drop <b>kab live</b> hoga? Button dabayein ya type karein:\n"
             "<code>10m</code> · <code>2h</code> · <code>9:30 PM</code> · <code>21:30</code>",
             reply_markup=kb(
                 [btn("1 min", "adm:drop_t:1"), btn("5 min", "adm:drop_t:5")],
@@ -1569,10 +2082,10 @@ async def handle_admin_state(m: Message, st: dict) -> None:
         if lead > 86400:
             await m.answer("⚠️ 24 ghante se zyada door ka time nahi de sakte.")
             return
-        text, markup = await drop_label_prompt(data["codes"], t)
+        text, markup = await drop_mode_prompt(data["codes"], t)
         await m.answer(text, reply_markup=markup)
 
-    # ---- Free Code Drop: step 3 (label)
+    # ---- Free Code Drop: step 4 (label)
     elif name == "admin_drop_label":
         label = (m.text or "").strip()
         if not label or len(label) > 60:
@@ -1580,6 +2093,67 @@ async def handle_admin_state(m: Message, st: dict) -> None:
             return
         text, markup = await drop_confirm_card(data, label)
         await m.answer(text, reply_markup=markup)
+
+    # ---- Reward: admin code bhejta hai
+    elif name == "admin_rw_code":
+        code = (m.text or "").strip()
+        if not code or len(code) > 200:
+            await m.answer("⚠️ Redeem code text me bhejein (max 200 chars).")
+            return
+        rid = data["rid"]
+        r = await rewards.find_one_and_update(
+            {"_id": rid, "status": "requested"},
+            {"$set": {"status": "sent", "sent_at": now_utc(), "code": code}},
+            return_document=ReturnDocument.AFTER,
+        )
+        await clear_state(ADMIN_ID)
+        if not r:
+            await m.answer("ℹ️ Ye request ab pending nahi hai (shayad pehle hi handle ho gayi).", reply_markup=admin_back_kb())
+            return
+        label, unit = TRACKS[r["track"]]
+        stt = await deliver(
+            r["uid"],
+            lambda cid: bot.send_message(
+                cid,
+                f"🎁 <b>Aapka ₹{r['amount']} Redeem Code aa gaya!</b>\n\n<code>{esc(code)}</code>\n\n"
+                f"({label}: {r['target']} {unit} card)\n"
+                "👆 Tap karke copy karein aur Google Play Store me redeem karein. Mubarak ho! 🎉",
+                reply_markup=kb([btn("📱 Open App", web_app=WEBSITE_URL)]),
+            ),
+        )
+        if stt != OK:  # DM nahi gaya -> wapas pending
+            await rewards.update_one({"_id": rid}, {"$set": {"status": "requested"}, "$unset": {"code": ""}})
+            await m.answer("❌ User ko DM nahi ja paya (bot block/delete). Request pending hi hai.", reply_markup=admin_back_kb())
+            return
+        site_invalidate(r["uid"])
+        await m.answer(f"✅ ₹{r['amount']} code bhej diya aur card 'Redeemed' ho gaya.", reply_markup=admin_back_kb())
+        await safe_log(f"🎁 <b>Reward Sent</b> — ₹{r['amount']} ({label} {r['target']}) → <code>{r['uid']}</code>")
+
+    # ---- Reward cards config
+    elif name in ("admin_rwcfg_streak", "admin_rwcfg_refer"):
+        track = name.rsplit("_", 1)[1]
+        cards = parse_cards(m.text or "")
+        if not cards:
+            await m.answer("⚠️ Format galat. Aise bhejein: <code>20:10, 50:20, 100:40</code> (targets badhte hue, max 8).")
+            return
+        REWARD_CFG[track] = cards
+        cfg_doc = {k: REWARD_CFG[k] for k in ("streak", "refer")}
+        await config.replace_one({"_id": "reward_cfg"}, {"_id": "reward_cfg", **cfg_doc}, upsert=True)
+        live_state["v"] += 1
+        await clear_state(ADMIN_ID)
+        await m.answer(f"✅ {TRACKS[track][0]} cards update ho gaye:\n{cards_text(track)}", reply_markup=admin_back_kb())
+
+    # ---- Notice
+    elif name == "admin_notice":
+        text = (m.text or "").strip()
+        if not text or len(text) > 200:
+            await m.answer("⚠️ Notice 1-200 characters ka text hona chahiye.")
+            return
+        NOTICE["text"] = text
+        await config.replace_one({"_id": "notice"}, {"_id": "notice", "text": text, "at": now_utc()}, upsert=True)
+        live_state["v"] += 1
+        await clear_state(ADMIN_ID)
+        await m.answer("✅ Notice Mini App me live ho gaya.", reply_markup=admin_back_kb())
 
     # ---- Add Sponsor: step 1 (channel id)
     elif name == "admin_sp_id":
@@ -1792,10 +2366,281 @@ async def run_admin_broadcast(
 
 
 # ======================================================================
-#  ⚡ FREE CODE DROPS
+#  🎯 REWARD CARDS  (streak / refer milestone -> ₹ redeem code, admin deta hai)
+# ======================================================================
+TRACKS = {"streak": ("🔥 Streak", "din"), "refer": ("👥 Refer", "refer")}
+
+
+def mention(uid: int, name: Optional[str]) -> str:
+    """Blue clickable naam (profile khulti hai)."""
+    return f'<a href="tg://user?id={uid}">{esc((name or "User")[:30])}</a>'
+
+
+def site_invalidate(uid: int) -> None:
+    fn = site_ctx.get("hooks", {}).get("invalidate")
+    if fn:
+        fn(uid)
+
+
+def parse_cards(text: str) -> Optional[list]:
+    """'20:10, 50:20' -> [[20,10],[50,20]]  (targets badhte hue, max 8 cards)."""
+    out = []
+    for part in re.split(r"[,\n;]+", text or ""):
+        part = part.strip()
+        if not part:
+            continue
+        m = re.fullmatch(r"(\d{1,4})\s*[:=\-]\s*(\d{1,5})", part)
+        if not m:
+            return None
+        out.append([int(m.group(1)), int(m.group(2))])
+    if not out or len(out) > 8:
+        return None
+    targets = [t for t, _ in out]
+    if targets != sorted(set(targets)) or min(targets) < 1 or any(a < 1 for _, a in out):
+        return None
+    return out
+
+
+def cards_text(track: str) -> str:
+    label, unit = TRACKS[track]
+    return ", ".join(f"{t} {unit} → ₹{a}" for t, a in REWARD_CFG[track])
+
+
+async def grant_card(uid: int, track: str, cycle: int, value: int) -> Optional[dict]:
+    """Value kisi target ke barabar ho to card 'earned' (idempotent)."""
+    for target, amount in REWARD_CFG[track]:
+        if value == target:
+            rid = f"{uid}:{track}:{cycle}:{target}"
+            try:
+                await rewards.insert_one(
+                    {"_id": rid, "uid": uid, "track": track, "cycle": cycle, "target": target,
+                     "amount": amount, "status": "earned", "earned_at": now_utc()}
+                )
+            except DuplicateKeyError:
+                return None
+            site_invalidate(uid)
+            return {"id": rid, "track": track, "target": target, "amount": amount}
+    return None
+
+
+async def notify_card_earned(uid: int, card: dict) -> None:
+    label, unit = TRACKS[card["track"]]
+    await deliver(
+        uid,
+        lambda cid: bot.send_message(
+            cid,
+            f"🎉 <b>Reward Card Unlock!</b>\n\n{label}: <b>{card['target']} {unit}</b> poora hua!\n"
+            f"🎁 Aapka <b>₹{card['amount']} Redeem Code</b> card ready hai.\n\n"
+            "📱 App → <b>Rewards</b> tab → <b>Redeem Now</b> dabayein. Admin 24 ghante me code bhejega.",
+            reply_markup=kb([btn("🎁 Rewards kholo", web_app=WEBSITE_URL)]),
+        ),
+    )
+
+
+async def redeem_reward_core(uid: int, rid: str) -> dict:
+    u = await get_user_cached(uid)
+    if not u:
+        return {"status": "unregistered"}
+    if u.get("banned"):
+        return {"status": "banned"}
+    now = now_utc()
+    r = await rewards.find_one_and_update(
+        {"_id": str(rid), "uid": uid, "status": "earned"},
+        {"$set": {"status": "requested", "requested_at": now, "deadline": now + timedelta(hours=24),
+                  "remind_at": now + timedelta(hours=12)}},
+        return_document=ReturnDocument.AFTER,
+    )
+    if not r:
+        cur = await rewards.find_one({"_id": str(rid), "uid": uid})
+        return {"status": "already" if cur else "not_found", "state": cur.get("status") if cur else None}
+    site_invalidate(uid)
+    spawn(send_reward_card(r))
+    return {"status": "ok", "deadline": r["deadline"].isoformat()}
+
+
+async def send_reward_card(r: dict, reminder: bool = False) -> None:
+    uid = r["uid"]
+    u = await users.find_one({"_id": uid}) or {}
+    junk_friends = await users.count_documents({"ref_by": uid, "junk": True})
+    label, unit = TRACKS[r["track"]]
+    left = r["deadline"] - now_utc()
+    left_txt = fmt_td(left) if left.total_seconds() > 0 else "⚠️ time nikal chuka"
+    flag = "\n⚠️ <b>Fraud flag</b> — pehle check kar lein!" if u.get("ref_flag") else ""
+    head = "⏰ <b>REMINDER — Reward pending</b>" if reminder else "🎁 <b>Reward Redeem Request</b>"
+    text = (
+        f"{head}\n\n"
+        f"👤 {mention(uid, u.get('name'))}  (<code>{uid}</code>)\n"
+        f"🏷 {label}: <b>{r['target']} {unit}</b> → <b>₹{r['amount']}</b> code\n"
+        f"📊 Streak: {u.get('streak', 0)} (best {u.get('best_streak', 0)}) · "
+        f"Refers: {u.get('ref_count', 0)} (blocked friends: {junk_friends})\n"
+        f"⏳ Deadline: <b>{fmt_ist(r['deadline'])}</b> ({left_txt}){flag}"
+    )
+    await notify_admin(text, kb([btn("📤 Send Code", f"rw:send:{r['_id']}"), btn("❌ Reject", f"rw:rej:{r['_id']}")]))
+
+
+@router.callback_query(F.data.startswith("rw:"))
+async def cb_reward_admin(cb: CallbackQuery):
+    if not is_admin(cb.from_user.id):
+        await cb.answer("⛔ Sirf admin ke liye", show_alert=True)
+        return
+    await cb.answer()
+    try:
+        _, action, rid = cb.data.split(":", 2)
+    except ValueError:
+        return
+    r = await rewards.find_one({"_id": rid})
+    if not r:
+        await bot.send_message(ADMIN_ID, "⚠️ Ye reward nahi mila.")
+        return
+    u = await users.find_one({"_id": r["uid"]}) or {}
+    who = f"{mention(r['uid'], u.get('name'))} (<code>{r['uid']}</code>)"
+    if action == "view":
+        await send_reward_card(r)
+    elif r["status"] != "requested":
+        await bot.send_message(ADMIN_ID, f"ℹ️ Ye request ab <b>{esc(r['status'])}</b> hai.")
+    elif action == "send":
+        await set_state(ADMIN_ID, "admin_rw_code", {"rid": rid}, ttl_min=120)
+        await bot.send_message(
+            ADMIN_ID, f"📤 {who} ke liye <b>₹{r['amount']}</b> redeem code bhejein (text):", reply_markup=admin_cancel_kb()
+        )
+    elif action == "rej":
+        await bot.send_message(
+            ADMIN_ID,
+            f"❌ {who} ki ₹{r['amount']} request <b>reject</b> karein?",
+            reply_markup=kb([btn("✅ Haan, Reject", f"rw:rejy:{rid}")], [btn("↩️ Wapas", "adm:home")]),
+        )
+    elif action == "rejy":
+        res = await rewards.find_one_and_update(
+            {"_id": rid, "status": "requested"}, {"$set": {"status": "rejected", "rejected_at": now_utc()}}
+        )
+        if res:
+            site_invalidate(r["uid"])
+            await deliver(
+                r["uid"],
+                lambda cid: bot.send_message(
+                    cid,
+                    f"❌ Aapki ₹{r['amount']} reward request verify nahi ho paayi.\n"
+                    f"Madad ke liye contact karein: {esc(SUPPORT_USERNAME)}",
+                ),
+            )
+            await bot.send_message(ADMIN_ID, "✅ Request reject ho gayi aur user ko bata diya.", reply_markup=admin_back_kb())
+
+
+async def rewards_watch_once() -> int:
+    now = now_utc()
+    due = [r async for r in rewards.find({"status": "requested", "remind_at": {"$lte": now}}).limit(10)]
+    for r in due:
+        dl = r["deadline"]
+        if now < dl - timedelta(hours=4):
+            nxt = dl - timedelta(hours=4)
+        elif now < dl:
+            nxt = dl
+        else:
+            nxt = now + timedelta(hours=6)
+        await rewards.update_one({"_id": r["_id"]}, {"$set": {"remind_at": nxt}})
+        await send_reward_card(r, reminder=True)
+    return len(due)
+
+
+async def rewards_watch_loop() -> None:
+    """Pending reward requests ka reminder admin ko (12h, deadline-4h, deadline, phir har 6h)."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            await rewards_watch_once()
+        except Exception:
+            logger.exception("rewards_watch_loop")
+
+
+async def settings_core(uid: int, streak_remind: bool) -> dict:
+    await users.update_one({"_id": uid}, {"$set": {"streak_remind": bool(streak_remind)}})
+    site_invalidate(uid)
+    return {"status": "ok", "streak_remind": bool(streak_remind)}
+
+
+async def streak_remind_once() -> dict:
+    """Din me ek baar (atomic lock) un users ko DM jinki streak aaj claim nahi hui."""
+    today = today_ist()
+    try:
+        await config.update_one({"_id": "streak_remind", "date": {"$ne": today}}, {"$set": {"date": today}}, upsert=True)
+    except DuplicateKeyError:
+        return {"skipped": True}
+    cur = users.find(
+        {"streak": {"$gte": STREAK_REMIND_MIN}, "last_claim": {"$ne": today}, "streak_remind": {"$ne": False},
+         "junk": {"$ne": True}, "banned": {"$ne": True}},
+        {"streak": 1},
+    ).limit(STREAK_REMIND_MAX)
+    streaks = {d["_id"]: d.get("streak", 0) async for d in cur}
+    if not streaks:
+        return {"total": 0}
+    markup = kb([btn("🎁 Claim karo", web_app=WEBSITE_URL)], [btn("🔕 Reminder band karo", "sr:off")])
+    return await run_broadcast(
+        list(streaks),
+        lambda uid: bot.send_message(
+            uid,
+            f"🔥 <b>Streak bachao!</b>\n\nAapki <b>{streaks[uid]} din</b> ki streak hai — aaj ka Daily Bonus claim nahi hua.\n"
+            "Raat 12 baje se pehle claim karein, warna streak toot jayegi!",
+            reply_markup=markup,
+        ),
+    )
+
+
+async def streak_remind_loop() -> None:
+    """Roz STREAK_REMIND_HOUR (IST) par streak-reminder chalata hai."""
+    while True:
+        await asyncio.sleep(60)
+        try:
+            if datetime.now(IST).hour == STREAK_REMIND_HOUR:
+                stats = await streak_remind_once()
+                if not stats.get("skipped"):
+                    logger.info("streak reminders: %s", stats)
+        except Exception:
+            logger.exception("streak_remind_loop")
+
+
+@router.callback_query(F.data == "sr:off")
+async def cb_streak_off(cb: CallbackQuery):
+    await settings_core(cb.from_user.id, False)
+    await cb.answer("🔕 Streak reminder band ho gaya (Profile me dobara ON kar sakte ho)", show_alert=True)
+
+
+@router.callback_query(F.data == "refcheck")
+async def cb_refcheck(cb: CallbackQuery):
+    res = await maybe_credit_referral(cb.from_user.id)
+    if res == "need_join":
+        await cb.answer("📢 Pehle channel join karein, fir ye button dabayein.", show_alert=True)
+    elif res == "credited":
+        await cb.answer("✅ Verified! Aapke dost ko reward mil gaya. Shukriya 🙏", show_alert=True)
+    else:
+        await cb.answer("✅ Sab theek hai!", show_alert=True)
+
+
+# ======================================================================
+#  ⚡ FREE CODE DROPS  (channel post edit nahi hoti — countdown/claims sirf Mini App me)
 # ======================================================================
 DEFAULT_DROP_LABEL = "Google Play Redeem Code"
 MEDALS = ["🥇", "🥈", "🥉"]
+drop_events: dict = {}
+
+
+def mem_set(d: dict) -> None:
+    """Active drop ki in-memory state (DB ke bina fast reject + /api/state ke liye)."""
+    old = live_state["drop"]
+    keep = old["users"] if old and old["no"] == d["_id"] else set()
+    live_state["drop"] = {
+        "no": d["_id"], "status": d["status"], "mode": d.get("mode", "fast"), "label": d.get("label"),
+        "total": d["total"], "claimed": d.get("claimed_count", 0), "queued": 0,
+        "go_live_at": d["go_live_at"], "live_at": d.get("live_at"), "window_ends": None,
+        "lucky_closed": bool(d.get("lucky_closed")), "users": keep,
+    }
+    live_state["v"] += 1
+
+
+def mem_patch(**kw) -> None:
+    ld = live_state["drop"]
+    if ld:
+        ld.update(kw)
+        live_state["v"] += 1
 
 
 def post_link(msg_id: int) -> str:
@@ -1850,53 +2695,66 @@ def fmt_drop_time(dt: datetime) -> str:
     return local.strftime("%I:%M %p") if same_day else local.strftime("%d %b, %I:%M %p")
 
 
-def wall_lines(wall: list, limit: int = 30) -> str:
+def wall_lines(wall: list, limit: int = 30, links: bool = False) -> str:
     lines = []
     for w in wall[:limit]:
         r = w.get("rank", 0)
         tag = MEDALS[r - 1] if 1 <= r <= 3 else f"{r}."
-        lines.append(f"{tag} <b>{esc(short_name(w.get('name')))}</b> — {sec_text(w.get('ms', 0))}")
+        nm = mention(w["uid"], short_name(w.get("name"))) if links else f"<b>{esc(short_name(w.get('name')))}</b>"
+        lines.append(f"{tag} {nm} — {sec_text(w.get('ms', 0))}")
     return "\n".join(lines)
 
 
-def render_teaser(drop: dict, remaining: float) -> str:
+def render_teaser(drop: dict) -> str:
+    lucky = drop.get("mode") == "lucky"
+    mode_line = (
+        f"🎲 <b>Lucky Draw:</b> live hone ke {LUCKY_WINDOW} sec me jo bhi JOIN karega unme se <b>random {drop['total']}</b> winners!\n"
+        if lucky else ""
+    )
     return (
         "⚡ <b>FREE REDEEM CODE DROP</b> ⚡\n\n"
         f"🎁 <b>{esc(drop['label'])}</b>\n"
         f"👥 Sirf <b>{drop['total']}</b> logon ke liye!\n"
-        f"🕘 Live hoga: <b>{fmt_drop_time(drop['go_live_at'])}</b> (IST)\n\n"
+        f"🕘 Live hoga: <b>{fmt_drop_time(drop['go_live_at'])}</b> (IST)\n"
+        f"{mode_line}\n"
         "📲 <b>Abhi Google Play Store kholkar Redeem screen par ready baith jao!</b>\n"
-        "Code aate hi sabse pehle CLAIM karne walon ko milega.\n\n"
-        f"⏳ Countdown: <b>{fmt_countdown(remaining)}</b>\n\n"
-        "🔔 Reminder ke liye neeche button dabayein."
+        "⏳ Live countdown aur claim <b>Mini App</b> me dekho 👇"
     )
 
 
-def render_live(drop: dict, wall: list) -> str:
-    body = wall_lines(wall) if wall else "Abhi koi claim nahi — pehle aap bano! 🚀"
+def render_live(drop: dict) -> str:
+    if drop.get("mode") == "lucky":
+        return (
+            "🎲 <b>LUCKY DROP LIVE!</b> 🎲\n\n"
+            f"🎁 <b>{esc(drop['label'])}</b>\n"
+            f"⏱ Sirf <b>{LUCKY_WINDOW} second</b> — abhi <b>JOIN</b> dabao!\n"
+            f"👥 Random <b>{drop['total']}</b> winners chune jayenge (tez ya dheere phone — sabko barabar mauka)."
+        )
     return (
         "🔥 <b>DROP LIVE — CLAIM NOW!</b> 🔥\n\n"
         f"🎁 <b>{esc(drop['label'])}</b>\n"
-        f"📦 Claimed: <b>{drop.get('claimed_count', 0)}/{drop['total']}</b>\n\n"
-        "👇 <b>CLAIM NOW</b> dabao — sabse pehle wale ko code milega!\n\n"
-        f"🏁 <b>Claim Wall</b>\n{body}"
+        f"📦 Sirf <b>{drop['total']}</b> codes!\n\n"
+        "👇 <b>CLAIM NOW</b> dabao — sabse pehle wale ko code milega!\n"
+        "📱 Live claim wall Mini App me dekho."
     )
 
 
 def render_done(drop: dict, wall: list, reason: str) -> str:
+    lucky = drop.get("mode") == "lucky"
     title = {
         "sold_out": "✅ <b>DROP COMPLETE</b> ✅",
+        "lucky_done": "🎲 <b>LUCKY DRAW COMPLETE</b> 🎲",
         "timeout": "⏰ <b>DROP KHATAM</b> ⏰",
     }.get(reason, "🛑 <b>DROP KHATAM</b> 🛑")
     extra = ""
     if reason == "sold_out" and wall:
         extra = f"\n⚡ Saare codes sirf <b>{sec_text(wall[-1].get('ms', 0))}</b> me claim ho gaye!"
-    body = wall_lines(wall) if wall else "Kisi ne claim nahi kiya 😔"
+    body = wall_lines(wall, links=True) if wall else "Kisi ne claim nahi kiya 😔"
     return (
         f"{title}\n\n"
         f"🎁 <b>{esc(drop['label'])}</b>\n"
-        f"📦 Claimed: <b>{drop.get('claimed_count', 0)}/{drop['total']}</b>{extra}\n\n"
-        f"🏁 <b>Claim Wall</b>\n{body}\n\n"
+        f"📦 {'Winners' if lucky else 'Claimed'}: <b>{drop.get('claimed_count', 0)}/{drop['total']}</b>{extra}\n\n"
+        f"🏁 <b>{'Lucky Winners' if lucky else 'Claim Wall'}</b>\n{body}\n\n"
         "🔔 Agla drop miss mat karna — channel notification ON rakho!"
     )
 
@@ -1905,8 +2763,8 @@ def teaser_kb(no: int) -> InlineKeyboardMarkup:
     return kb([btn("🔔 Remind Me", f"drop:remind:{no}")], [btn("📱 Open App", url=app_link())])
 
 
-def live_kb(no: int) -> InlineKeyboardMarkup:
-    return kb([btn("🎁 CLAIM NOW", f"drop:claim:{no}")], [btn("📱 Open App", url=app_link())])
+def live_kb(no: int, lucky: bool = False) -> InlineKeyboardMarkup:
+    return kb([btn("🎲 JOIN LUCKY DRAW" if lucky else "🎁 CLAIM NOW", f"drop:claim:{no}")], [btn("📱 Open App", url=app_link())])
 
 
 def done_kb() -> InlineKeyboardMarkup:
@@ -1914,14 +2772,6 @@ def done_kb() -> InlineKeyboardMarkup:
 
 
 # ---------------------------------------------------------------- channel helpers
-async def edit_post(msg_id: int, text: str, markup: Optional[InlineKeyboardMarkup] = None) -> bool:
-    res = await deliver(
-        TASK_CHANNEL_ID,
-        lambda cid: bot.edit_message_text(text, chat_id=cid, message_id=msg_id, reply_markup=markup),
-    )
-    return res == OK
-
-
 async def pin_post(msg_id: int) -> None:
     try:
         await bot.pin_chat_message(chat_id=TASK_CHANNEL_ID, message_id=msg_id, disable_notification=True)
@@ -1946,38 +2796,31 @@ async def active_drop() -> Optional[dict]:
 
 
 # ---------------------------------------------------------------- create / run / finish
-async def create_drop(codes: list, go_live_at: datetime, label: str) -> Optional[int]:
+async def create_drop(codes: list, go_live_at: datetime, label: str, mode: str = "fast") -> Optional[int]:
     ctr = await config.find_one_and_update(
         {"_id": "drop_counter"}, {"$inc": {"n": 1}}, upsert=True, return_document=ReturnDocument.AFTER
     )
     no = int(ctr["n"])
     drop = {
-        "_id": no,
-        "status": "scheduled",
-        "label": label,
-        "total": len(codes),
-        "claimed_count": 0,
-        "go_live_at": go_live_at,
-        "created_at": now_utc(),
-        "reminders": [],
-        "reminded": False,
-        "teaser_msg_id": None,
-        "live_msg_id": None,
+        "_id": no, "status": "scheduled", "mode": mode, "label": label, "total": len(codes), "claimed_count": 0,
+        "go_live_at": go_live_at, "created_at": now_utc(), "reminders": [], "reminded": False,
+        "teaser_msg_id": None, "live_msg_id": None,
     }
     await drops.insert_one(drop)
     for c in codes:
         await drop_codes.insert_one({"drop": no, "code": c, "claimed_by": None})
 
-    remaining = (go_live_at - now_utc()).total_seconds()
     status, msg = await deliver_result(
         TASK_CHANNEL_ID,
-        lambda cid: bot.send_message(cid, render_teaser(drop, remaining), reply_markup=teaser_kb(no)),
+        lambda cid: bot.send_message(cid, render_teaser(drop), reply_markup=teaser_kb(no)),
     )
     if status != OK:  # channel post nahi gayi -> sab rollback
         await drops.delete_one({"_id": no})
         await drop_codes.delete_many({"drop": no})
         return None
     await drops.update_one({"_id": no}, {"$set": {"teaser_msg_id": msg.message_id}})
+    drop["teaser_msg_id"] = msg.message_id
+    mem_set(drop)
     await pin_post(msg.message_id)
     start_drop_runner(no)
     return no
@@ -1986,15 +2829,22 @@ async def create_drop(codes: list, go_live_at: datetime, label: str) -> Optional
 def start_drop_runner(no: int) -> None:
     if no in drop_tasks and not drop_tasks[no].done():
         return
+    drop_events[no] = asyncio.Event()
     task = asyncio.create_task(run_drop(no))
     drop_tasks[no] = task
-    task.add_done_callback(lambda _t, n=no: drop_tasks.pop(n, None))
+
+    def _done(_t, n=no):
+        drop_tasks.pop(n, None)
+        drop_events.pop(n, None)
+
+    task.add_done_callback(_done)
 
 
 async def resume_drops() -> None:
     """Restart ke baad scheduled/live drops dobara chalu."""
     async for d in drops.find({"status": {"$in": ["scheduled", "live"]}}):
         logger.info("Resuming drop #%s (%s)", d["_id"], d["status"])
+        mem_set(d)
         start_drop_runner(d["_id"])
 
 
@@ -2015,33 +2865,32 @@ async def dm_subscribers(no: int, text: str, markup: Optional[InlineKeyboardMark
 
 async def go_live(no: int, drop: dict) -> bool:
     now = now_utc()
+    lucky = drop.get("mode") == "lucky"
     await drops.update_one({"_id": no}, {"$set": {"status": "live", "live_at": now}})
-    live_doc = {**drop, "status": "live", "claimed_count": 0}
+    mem_patch(status="live", live_at=now, window_ends=now + timedelta(seconds=LUCKY_WINDOW))
     status, msg = await deliver_result(
         TASK_CHANNEL_ID,
-        lambda cid: bot.send_message(cid, render_live(live_doc, []), reply_markup=live_kb(no)),
+        lambda cid: bot.send_message(cid, render_live(drop), reply_markup=live_kb(no, lucky)),
     )
     if status != OK:
         await drops.update_one({"_id": no}, {"$set": {"status": "cancelled"}})
+        mem_patch(status="cancelled")
         await notify_admin(
             f"❌ Drop #{no}: live post channel par nahi ja payi (bot ko channel me admin banayein).\n"
             "Drop cancel ho gaya — codes DB me safe hain."
         )
         return False
-    await drops.update_one({"_id": no}, {"$set": {"live_msg_id": msg.message_id, "live_at": now_utc()}})
+    live_at = now_utc()  # claim timing post jaane ke baad se
+    await drops.update_one({"_id": no}, {"$set": {"live_msg_id": msg.message_id, "live_at": live_at}})
+    mem_patch(live_at=live_at, window_ends=live_at + timedelta(seconds=LUCKY_WINDOW))
     if drop.get("teaser_msg_id"):
-        await edit_post(
-            drop["teaser_msg_id"],
-            "⚡ <b>DROP LIVE ho gaya!</b> 🔥\n\n👇 Niche wali post par <b>CLAIM NOW</b> dabao!",
-            kb([btn("🎁 Live Post par jao", url=post_link(msg.message_id))]),
-        )
         await unpin_post(drop["teaser_msg_id"])
     await pin_post(msg.message_id)
     spawn(
         dm_subscribers(
             no,
-            f"🔥 <b>DROP #{no} LIVE HO GAYA!</b>\n\nAbhi CLAIM karo — sabse pehle wale ko code milega!",
-            kb([btn("🎁 App me Claim karo", web_app=WEBSITE_URL)], [btn("📢 Channel Post", url=post_link(msg.message_id))]),
+            f"🔥 <b>DROP #{no} LIVE HO GAYA!</b>\n\nAbhi {'JOIN' if lucky else 'CLAIM'} karo!",
+            kb([btn("🎁 App me kholo", web_app=WEBSITE_URL)], [btn("📢 Channel Post", url=post_link(msg.message_id))]),
         )
     )
     return True
@@ -2051,58 +2900,93 @@ async def _run_drop(no: int) -> None:
     drop = await drops.find_one({"_id": no})
     if not drop:
         return
+    ev = drop_events.setdefault(no, asyncio.Event())
 
-    # ---- phase 1: teaser countdown
-    last_edit = -1e9
-    while drop and drop["status"] == "scheduled":
-        remaining = (drop["go_live_at"] - now_utc()).total_seconds()
-        if remaining <= 0:
-            break
-        if remaining <= 60 and not drop.get("reminded"):
-            await drops.update_one({"_id": no}, {"$set": {"reminded": True}})
-            drop["reminded"] = True
-            tl = post_link(drop["teaser_msg_id"]) if drop.get("teaser_msg_id") else TASK_CHANNEL_LINK
-            spawn(
-                dm_subscribers(
-                    no,
-                    f"⏰ <b>Drop #{no} sirf 1 minute me live hoga!</b>\n\n"
-                    "📲 Abhi Google Play Store ka <b>Redeem screen</b> kholkar ready ho jao!",
-                    kb([btn("📱 App kholo", web_app=WEBSITE_URL)], [btn("📢 Channel Post", url=tl)]),
-                )
-            )
-        interval = 60 if remaining > 300 else 20 if remaining > 60 else 5
-        if time.monotonic() - last_edit >= interval and drop.get("teaser_msg_id"):
-            last_edit = time.monotonic()
-            await edit_post(drop["teaser_msg_id"], render_teaser(drop, remaining), teaser_kb(no))
-        tick = 5.0 if remaining > 70 else 1.0
-        await asyncio.sleep(max(min(tick, remaining), 0.02))
-        drop = await drops.find_one({"_id": no})
-
-    if not drop:
-        return
+    # ---- phase 1: wait (koi DB polling nahi; admin cancel event se)
     if drop["status"] == "scheduled":
-        if not await go_live(no, drop):
+        reminded = bool(drop.get("reminded"))
+        while True:
+            remaining = (drop["go_live_at"] - now_utc()).total_seconds()
+            if remaining <= 0:
+                break
+            if remaining <= 60 and not reminded:
+                reminded = True
+                await drops.update_one({"_id": no}, {"$set": {"reminded": True}})
+                tl = post_link(drop["teaser_msg_id"]) if drop.get("teaser_msg_id") else TASK_CHANNEL_LINK
+                spawn(
+                    dm_subscribers(
+                        no,
+                        f"⏰ <b>Drop #{no} sirf 1 minute me live hoga!</b>\n\n"
+                        "📲 Abhi Google Play Store ka <b>Redeem screen</b> kholkar ready ho jao!",
+                        kb([btn("📱 App kholo", web_app=WEBSITE_URL)], [btn("📢 Channel Post", url=tl)]),
+                    )
+                )
+            wait = min(remaining, 30.0 if remaining > 70 else 1.0)
+            try:
+                await asyncio.wait_for(ev.wait(), timeout=max(wait, 0.02))
+                return  # cancel hua
+            except asyncio.TimeoutError:
+                pass
+        cur = await drops.find_one({"_id": no})
+        if not cur or cur["status"] != "scheduled":
             return
-    elif drop["status"] != "live":
-        return  # cancelled
+        if not await go_live(no, cur):
+            return
 
-    # ---- phase 2: live — claims ginte raho, post update karte raho
-    last_edit, last_count = time.monotonic(), 0
-    while True:
-        await asyncio.sleep(0.5)
-        d = await drops.find_one({"_id": no})
-        if not d or d["status"] != "live":
+    # ---- phase 2: live
+    d = await drops.find_one({"_id": no})
+    if not d or d["status"] != "live":
+        return
+    if d.get("mode") == "lucky":
+        end = d["live_at"] + timedelta(seconds=LUCKY_WINDOW)
+        try:
+            await asyncio.wait_for(ev.wait(), timeout=max((end - now_utc()).total_seconds(), 0.02))
             return
-        if d.get("claimed_count", 0) >= d["total"]:
+        except asyncio.TimeoutError:
+            pass
+        mem_patch(lucky_closed=True)
+        await drops.update_one({"_id": no}, {"$set": {"lucky_closed": True}})
+        await asyncio.sleep(0.8)  # in-flight joins settle
+        await resolve_lucky(no)
+        await finish_drop(no, "lucky_done")
+        return
+    while True:
+        try:
+            await asyncio.wait_for(ev.wait(), timeout=0.25)
+            return
+        except asyncio.TimeoutError:
+            pass
+        ls = live_state["drop"]
+        if not ls or ls["no"] != no or ls["status"] != "live":
+            return
+        if ls["claimed"] >= ls["total"]:
             await finish_drop(no, "sold_out")
             return
-        if d.get("live_at") and (now_utc() - d["live_at"]).total_seconds() > DROP_TIMEOUT_MIN * 60:
+        if ls.get("live_at") and (now_utc() - ls["live_at"]).total_seconds() > DROP_TIMEOUT_MIN * 60:
             await finish_drop(no, "timeout")
             return
-        count = d.get("claimed_count", 0)
-        if count != last_count and d.get("live_msg_id") and time.monotonic() - last_edit >= 2.0:
-            last_edit, last_count = time.monotonic(), count
-            await edit_post(d["live_msg_id"], render_live(d, await get_wall(no)), live_kb(no))
+
+
+async def resolve_lucky(no: int) -> None:
+    d = await drops.find_one({"_id": no})
+    docs = [c async for c in drop_claims.find({"drop": no, "lucky": True})]
+    n = min(d["total"], len(docs))
+    picks = random.SystemRandom().sample(docs, n) if n else []
+    picks.sort(key=lambda c: c.get("ms", 0))
+    won = 0
+    for rank, c in enumerate(picks, 1):
+        code_doc = await drop_codes.find_one_and_update(
+            {"drop": no, "claimed_by": None}, {"$set": {"claimed_by": c["uid"], "claimed_at": now_utc()}}
+        )
+        if not code_doc:
+            break
+        won += 1
+        await drop_claims.update_one({"_id": c["_id"]}, {"$set": {"rank": rank, "code": code_doc["code"]}})
+        spawn(after_claim(c["uid"], c.get("name"), no, rank, c.get("ms", 0), code_doc["code"], lucky=True))
+        site_invalidate(c["uid"])
+    await drop_claims.update_many({"drop": no, "lucky": True, "rank": None}, {"$set": {"lost": True}})
+    await drops.update_one({"_id": no}, {"$set": {"claimed_count": won, "lucky_entries": len(docs)}})
+    mem_patch(claimed=won)
 
 
 async def finish_drop(no: int, reason: str) -> None:
@@ -2113,17 +2997,27 @@ async def finish_drop(no: int, reason: str) -> None:
     )
     if not d:
         return
+    mem_patch(status="ended")
+    ev = drop_events.get(no)
+    if ev:
+        ev.set()
     await asyncio.sleep(1.0)  # in-flight claims settle ho jayein
     d = await drops.find_one({"_id": no}) or d
     wall = await get_wall(no)
     left = [c["code"] async for c in drop_codes.find({"drop": no, "claimed_by": None})]
+
+    # channel par EK nayi final post (edit nahi) + live post unpin
+    await deliver(
+        TASK_CHANNEL_ID,
+        lambda cid: bot.send_message(cid, render_done(d, wall, reason), reply_markup=done_kb()),
+    )
     if d.get("live_msg_id"):
-        await edit_post(d["live_msg_id"], render_done(d, wall, reason), done_kb())
         await unpin_post(d["live_msg_id"])
 
-    reason_txt = {"sold_out": "sab codes claim ho gaye ✅", "timeout": "time khatam ⏰"}.get(reason, "admin ne end kiya 🛑")
+    reason_txt = {"sold_out": "sab codes claim ho gaye ✅", "lucky_done": "lucky draw complete 🎲",
+                  "timeout": "time khatam ⏰"}.get(reason, "admin ne end kiya 🛑")
     lines = "\n".join(
-        f"{w['rank']}. {esc(short_name(w.get('name')))} (<code>{w['uid']}</code>) — {sec_text(w.get('ms', 0))}"
+        f"{w['rank']}. {mention(w['uid'], w.get('name'))} (<code>{w['uid']}</code>) — {sec_text(w.get('ms', 0))}"
         for w in wall[:15]
     ) or "— koi claim nahi"
     more = f"\n… aur {len(wall) - 15}" if len(wall) > 15 else ""
@@ -2133,13 +3027,12 @@ async def finish_drop(no: int, reason: str) -> None:
         left_txt = f"\n\n🔓 <b>Bache hue codes</b> ({len(left)}) — dobara use kar sakte ho:\n{shown}"
     await notify_admin(
         f"🏁 <b>Drop #{no} khatam</b> — {reason_txt}\n\n"
-        f"📦 Claimed: <b>{d.get('claimed_count', 0)}/{d['total']}</b>\n\n"
-        f"<b>Claim list</b>\n{lines}{more}{left_txt}",
+        f"📦 {'Winners' if d.get('mode') == 'lucky' else 'Claimed'}: <b>{d.get('claimed_count', 0)}/{d['total']}</b>"
+        + (f" (joined: {d.get('lucky_entries', 0)})" if d.get("mode") == "lucky" else "")
+        + f"\n\n<b>List</b>\n{lines}{more}{left_txt}",
         admin_back_kb(),
     )
-    await safe_log(
-        f"⚡ <b>Drop #{no} Ended</b> — {d.get('claimed_count', 0)}/{d['total']} claimed ({reason})"
-    )
+    await safe_log(f"⚡ <b>Drop #{no} Ended</b> — {d.get('claimed_count', 0)}/{d['total']} ({reason})")
 
 
 async def cancel_drop(no: int) -> str:
@@ -2152,10 +3045,17 @@ async def cancel_drop(no: int) -> str:
         )
         if not res:
             return "Drop pehle hi badal chuka hai."
+        mem_patch(status="cancelled")
+        ev = drop_events.get(no)
+        if ev:
+            ev.set()
         if d.get("teaser_msg_id"):
-            await edit_post(d["teaser_msg_id"], "❌ <b>Ye drop cancel ho gaya.</b>\n\nAgle drop ke liye bane rahein 🔔", done_kb())
             await unpin_post(d["teaser_msg_id"])
-        return f"✅ Drop #{no} cancel ho gaya. Codes DB me safe hain (dobara naya drop banakar use kar sakte ho)."
+            await deliver(
+                TASK_CHANNEL_ID,
+                lambda cid: bot.send_message(cid, "❌ <b>Pehle announce kiya gaya drop cancel ho gaya.</b>\n\nAgle drop ke liye bane rahein 🔔", reply_markup=done_kb()),
+            )
+        return f"✅ Drop #{no} cancel ho gaya. Codes DB me safe hain (naya drop banakar use kar sakte ho)."
     if d["status"] == "live":
         await finish_drop(no, "admin")
         return f"✅ Drop #{no} end kar diya. Report neeche aayegi."
@@ -2164,51 +3064,89 @@ async def cancel_drop(no: int) -> str:
 
 # ---------------------------------------------------------------- claim / remind (bot + Mini App)
 async def claim_drop_core(uid: int, no: int) -> dict:
-    drop = await drops.find_one({"_id": no})
-    if not drop:
-        return {"status": "not_found"}
-    if drop["status"] == "scheduled":
-        return {"status": "not_live"}
-    if drop["status"] != "live":
-        return {"status": "ended"}
-    u = await users.find_one({"_id": uid})
+    ls = live_state["drop"]
+    mode = "fast"
+    if ls and ls["no"] == no:  # fast path: DB ke bina reject
+        st = ls["status"]
+        if st == "scheduled":
+            return {"status": "not_live"}
+        if st != "live":
+            return {"status": "ended"}
+        mode = ls["mode"]
+        if mode == "lucky" and ls["lucky_closed"]:
+            return {"status": "late"}
+        if mode != "lucky" and ls["claimed"] >= ls["total"]:
+            return {"status": "sold_out"}
+        live_at = ls.get("live_at") or now_utc()
+    else:
+        drop = await drops.find_one({"_id": no})
+        if not drop:
+            return {"status": "not_found"}
+        if drop["status"] == "scheduled":
+            return {"status": "not_live"}
+        if drop["status"] != "live":
+            return {"status": "ended"}
+        mode = drop.get("mode", "fast")
+        live_at = drop.get("live_at") or now_utc()
+        if mode == "lucky" and drop.get("lucky_closed"):
+            return {"status": "late"}
+
+    u = await get_user_cached(uid)
     if not u or not u.get("verified"):
         return {"status": "unverified"}
+    if u.get("banned"):
+        return {"status": "banned"}
 
+    now = now_utc()
+    ms = max(int((now - live_at).total_seconds() * 1000), 1)
     claim_id = f"{no}:{uid}"
+    doc = {"_id": claim_id, "drop": no, "uid": uid, "name": u.get("name"), "username": u.get("username"),
+           "rank": None, "ms": ms, "at": now}
+    if mode == "lucky":
+        doc["lucky"] = True
     try:
-        await drop_claims.insert_one(
-            {"_id": claim_id, "drop": no, "uid": uid, "name": u.get("name"), "rank": None, "at": now_utc()}
-        )
+        await drop_claims.insert_one(doc)
     except DuplicateKeyError:
         prev = await drop_claims.find_one({"_id": claim_id}) or {}
+        if prev.get("lucky") and prev.get("rank") is None:
+            return {"status": "queued", "dup": True}
         return {"status": "duplicate", "rank": prev.get("rank"), "ms": prev.get("ms", 0), "code": prev.get("code")}
+
+    if mode == "lucky":
+        if ls and ls["no"] == no:
+            ls["queued"] += 1
+            live_state["v"] += 1
+        site_invalidate(uid)
+        return {"status": "queued"}
 
     # atomic: ek code ek hi user ko
     code_doc = await drop_codes.find_one_and_update(
-        {"drop": no, "claimed_by": None}, {"$set": {"claimed_by": uid, "claimed_at": now_utc()}}
+        {"drop": no, "claimed_by": None}, {"$set": {"claimed_by": uid, "claimed_at": now}}
     )
     if not code_doc:
         await drop_claims.delete_one({"_id": claim_id})
+        mem_patch(claimed=ls["total"] if ls and ls["no"] == no else 0)
         return {"status": "sold_out"}
 
-    d = await drops.find_one_and_update(
-        {"_id": no}, {"$inc": {"claimed_count": 1}}, return_document=ReturnDocument.AFTER
-    )
+    d = await drops.find_one_and_update({"_id": no}, {"$inc": {"claimed_count": 1}}, return_document=ReturnDocument.AFTER)
     rank = int(d["claimed_count"])
-    ms = max(int((now_utc() - (d.get("live_at") or now_utc())).total_seconds() * 1000), 1)
     code = code_doc["code"]
-    await drop_claims.update_one({"_id": claim_id}, {"$set": {"rank": rank, "ms": ms, "code": code}})
+    await drop_claims.update_one({"_id": claim_id}, {"$set": {"rank": rank, "code": code}})
+    if ls and ls["no"] == no:
+        ls["claimed"] = max(ls["claimed"], rank)
+        ls["users"].add(uid)
+        live_state["v"] += 1
+    site_invalidate(uid)
     spawn(after_claim(uid, u.get("name"), no, rank, ms, code))
     return {"status": "ok", "rank": rank, "ms": ms, "code": code}
 
 
-async def after_claim(uid: int, name: Optional[str], no: int, rank: int, ms: int, code: str) -> None:
+async def after_claim(uid: int, name: Optional[str], no: int, rank: int, ms: int, code: str, lucky: bool = False) -> None:
     await deliver(
         uid,
         lambda cid: bot.send_message(
             cid,
-            f"🎉 <b>Mubarak ho! Drop #{no} claim ho gaya!</b>\n\n"
+            f"🎉 <b>Mubarak ho! Drop #{no} {'jeet liya' if lucky else 'claim ho gaya'}!</b>\n\n"
             f"🏅 Rank: <b>#{rank}</b>   ⚡ {sec_text(ms)}\n\n"
             f"🎁 Aapka Redeem Code:\n<code>{esc(code)}</code>\n\n"
             "👆 Tap karke copy karein aur <b>turant Google Play Store me redeem</b> karein!",
@@ -2216,7 +3154,7 @@ async def after_claim(uid: int, name: Optional[str], no: int, rank: int, ms: int
         ),
     )
     await safe_log(
-        f"⚡ <b>Drop #{no} Claim</b>\n\n👤 {esc(name)}  (<code>{uid}</code>)\n"
+        f"⚡ <b>Drop #{no} Winner</b>\n\n{mention(uid, name)}  (<code>{uid}</code>)\n"
         f"🏅 Rank #{rank}  ⚡ {sec_text(ms)}\n🎁 Code: <code>{esc(code)}</code>"
     )
 
@@ -2228,6 +3166,7 @@ async def remind_core(uid: int, no: int) -> dict:
     if not d or d["status"] != "scheduled":
         return {"status": "closed"}
     res = await drops.update_one({"_id": no}, {"$addToSet": {"reminders": uid}})
+    site_invalidate(uid)
     return {"status": "ok" if res.modified_count else "already"}
 
 
@@ -2250,13 +3189,19 @@ async def cb_drop(cb: CallbackQuery):
                     f"🎉 Mubarak! Rank #{r['rank']} ({r['ms'] / 1000:.1f}s)\n\n🎁 Code: {r['code']}\n\n(DM me bhi bheja gaya)",
                     show_alert=True,
                 )
+            elif st == "queued":
+                await cb.answer(f"✅ Entry mil gayi! {LUCKY_WINDOW} sec baad random winners chune jayenge — winner ko DM aayega 🎲", show_alert=True)
             elif st == "duplicate":
                 extra = f"\n\n🎁 Code: {r['code']}" if r.get("code") else ""
                 await cb.answer("✅ Aap pehle hi claim kar chuke ho!" + extra, show_alert=True)
             elif st == "unverified":
                 await cb.answer("Pehle bot start karke Verify karein", url=start_url)
+            elif st == "banned":
+                await cb.answer("🚫 Aapka account restricted hai.", show_alert=True)
             elif st == "sold_out":
                 await cb.answer("😔 Saare codes claim ho chuke hain!", show_alert=True)
+            elif st == "late":
+                await cb.answer("⏳ Lucky window band ho chuki hai.", show_alert=True)
             elif st == "not_live":
                 await cb.answer("⏳ Drop abhi live nahi hua — thoda ruko!", show_alert=True)
             else:
@@ -2282,6 +3227,7 @@ async def cb_drop(cb: CallbackQuery):
 async def render_drop_menu(cb: CallbackQuery) -> None:
     d = await active_drop()
     if d:
+        mode = "🎲 Lucky" if d.get("mode") == "lucky" else "⚡ Fast"
         if d["status"] == "scheduled":
             rem = (d["go_live_at"] - now_utc()).total_seconds()
             info = f"🟡 <b>Scheduled</b> — live hone me <b>{fmt_countdown(rem)}</b>\n🕘 {fmt_ist(d['go_live_at'])}"
@@ -2289,48 +3235,63 @@ async def render_drop_menu(cb: CallbackQuery) -> None:
         else:
             info = f"🔴 <b>LIVE</b> — claimed <b>{d.get('claimed_count', 0)}/{d['total']}</b>"
             action_btn = btn("🛑 End Now", f"adm:drop_cancel:{d['_id']}")
-        text = f"⚡ <b>Free Code Drop #{d['_id']}</b>\n\n🎁 {esc(d['label'])}\n📦 Codes: {d['total']}\n{info}"
+        text = f"⚡ <b>Free Code Drop #{d['_id']}</b> ({mode})\n\n🎁 {esc(d['label'])}\n📦 Codes: {d['total']}\n{info}"
         rows = [[action_btn], [btn("⬅️ Admin Panel", "adm:home")]]
     else:
         text = (
             "⚡ <b>Free Code Drop</b>\n\nAbhi koi active drop nahi hai.\n\n"
-            "<b>Flow:</b> codes → time → (label) → confirm.\n"
-            "Bot channel par teaser post karega (pin hoga), time par <b>LIVE post</b> aayega, "
-            "aur sabse pehle CLAIM karne wale ko code milega. Claim wall khud channel par dikhega."
+            "<b>Flow:</b> codes → time → mode → (label) → confirm.\n"
+            "Bot channel par teaser post karega (pin hoga), time par <b>LIVE post</b> aayega. "
+            "Countdown aur claim wall <b>Mini App</b> me chalte hain (channel post edit nahi hoti)."
         )
         rows = [[btn("➕ New Drop", "adm:drop_new")], [btn("⬅️ Admin Panel", "adm:home")]]
     await safe_edit(cb, text, kb(*rows))
 
 
-async def drop_label_prompt(codes: list, go_live_at: datetime) -> tuple:
-    await set_state(ADMIN_ID, "admin_drop_label", {"codes": codes, "go_live_at": go_live_at.isoformat()})
+async def drop_mode_prompt(codes: list, go_live_at: datetime) -> tuple:
+    await set_state(ADMIN_ID, "admin_drop_mode", {"codes": codes, "go_live_at": go_live_at.isoformat()}, ttl_min=30)
     text = (
         f"⏰ Live time: <b>{fmt_ist(go_live_at)}</b>\n\n"
-        "Step 3/3 — <b>Prize label</b> bhejein (jaise <code>Google Play ₹50 Redeem Code</code>) "
-        "ya Skip dabayein:"
+        "Step 3/4 — <b>Mode</b> chunein:\n\n"
+        "⚡ <b>Fast</b> — sabse pehle tap karne wale ko code.\n"
+        f"🎲 <b>Lucky</b> — {LUCKY_WINDOW} sec me jo JOIN kare unme se random winners (slow phone wale bhi jeet sakte hain)."
+    )
+    return text, kb(
+        [btn("⚡ Fast", "adm:drop_m:fast"), btn("🎲 Lucky", "adm:drop_m:lucky")],
+        [btn("❌ Cancel", "adm:home")],
+    )
+
+
+async def drop_label_prompt(data: dict, mode: str) -> tuple:
+    await set_state(ADMIN_ID, "admin_drop_label", {**data, "mode": mode}, ttl_min=30)
+    text = (
+        f"Mode: <b>{'🎲 Lucky' if mode == 'lucky' else '⚡ Fast'}</b>\n\n"
+        "Step 4/4 — <b>Prize label</b> bhejein (jaise <code>Google Play ₹50 Redeem Code</code>) ya Skip dabayein:"
     )
     return text, kb([btn("⏭ Skip", "adm:drop_skip")], [btn("❌ Cancel", "adm:home")])
 
 
 async def drop_confirm_card(data: dict, label: str) -> tuple:
     go_live_at = datetime.fromisoformat(data["go_live_at"])
+    mode = data.get("mode", "fast")
     await set_state(
-        ADMIN_ID, "admin_drop_confirm", {"codes": data["codes"], "go_live_at": data["go_live_at"], "label": label}
+        ADMIN_ID, "admin_drop_confirm",
+        {"codes": data["codes"], "go_live_at": data["go_live_at"], "label": label, "mode": mode}, ttl_min=30,
     )
     text = (
         "⚡ <b>Confirm Drop</b>\n\n"
         f"🎁 Label: <b>{esc(label)}</b>\n"
-        f"📦 Codes (= claimers): <b>{len(data['codes'])}</b>\n"
+        f"🎮 Mode: <b>{'🎲 Lucky' if mode == 'lucky' else '⚡ Fast'}</b>\n"
+        f"📦 Codes (= winners): <b>{len(data['codes'])}</b>\n"
         f"🕘 Live time: <b>{fmt_ist(go_live_at)}</b>\n"
         f"⏳ Live hone me: <b>{fmt_countdown((go_live_at - now_utc()).total_seconds())}</b>\n\n"
         "Confirm karte hi:\n"
-        "1️⃣ Channel par <b>teaser post</b> hogi (pin) — notification jayega\n"
-        "2️⃣ Time par <b>LIVE post</b> + CLAIM button aayega\n"
-        "3️⃣ Sabse pehle claim karne walon ko code (popup + DM)\n"
-        "4️⃣ Claim wall khud channel par update hogi"
+        "1️⃣ Channel par <b>teaser post</b> (pin) — notification jayega\n"
+        "2️⃣ Time par <b>LIVE post</b> + button aayega\n"
+        "3️⃣ Winner ko code (popup + DM)\n"
+        "4️⃣ End par ek <b>final post</b> (claim wall). Beech me koi post edit nahi hogi."
     )
     return text, kb([btn("✅ Schedule Drop", "adm:drop_go")], [btn("❌ Cancel", "adm:home")])
-
 
 
 # ======================================================================
@@ -2341,7 +3302,10 @@ async def main() -> None:
     if not BOT_TOKEN or not MONGO_URI:
         raise SystemExit("❌ BOT_TOKEN aur MONGO_URI environment variables set karna zaroori hai.")
 
-    site_ctx["actions"] = {"claim": claim_drop_core, "daily": daily_core, "remind": remind_core}
+    site_ctx["actions"] = {
+        "claim": claim_drop_core, "daily": daily_core, "remind": remind_core,
+        "redeem": redeem_reward_core, "settings": settings_core,
+    }
 
     # Mini App + health server pehle start (Koyeb health check pass ho)
     runner = await site_app.start_server(site_ctx, PORT)
@@ -2353,11 +3317,17 @@ async def main() -> None:
     )
     dp = Dispatcher()
     dp.include_router(router)
+    bot.session.middleware(PacedRequests())   # global pacing + FloodWait retry
+    dp.update.outer_middleware(LoadGuard())   # concurrency cap + spam throttle + load shedding
 
     me = await bot.get_me()
     await bot.delete_webhook(drop_pending_updates=False)
     logger.info("Bot started: @%s", me.username)
     await resume_drops()
+    spawn(monitor_loop())
+    spawn(rewards_watch_loop())
+    spawn(streak_remind_loop())
+    spawn(alert_admin("startup", "🔄 <b>Bot start/restart hua</b> ✅\nAgar ye baar-baar aaye to Koyeb logs check karein.", cooldown=120))
 
     try:  # chat ke menu button se website (Mini App) khulegi
         await bot.set_chat_menu_button(
