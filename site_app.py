@@ -64,6 +64,60 @@ def video_label(url: str) -> str:
     return "🔗 Video dekho"
 
 
+def link_label(label, url) -> str:
+    """Platform ka naam: admin ne diya ho to wahi, warna link se pehchan."""
+    label = (label or "").strip()
+    if label:
+        return label
+    u = (url or "").lower()
+    if "youtu" in u:
+        return "YouTube"
+    if "instagram" in u:
+        return "Instagram"
+    if "t.me" in u or "telegram" in u:
+        return "Telegram"
+    if "facebook" in u or "fb.com" in u or "fb.watch" in u:
+        return "Facebook"
+    return "Link"
+
+
+def link_text(link: dict) -> str:
+    """Button ka text, jaise '📸 Instagram par dekho'."""
+    label = link_label(link.get("label"), link.get("url"))
+    s = (label + " " + (link.get("url") or "")).lower()
+    if "youtu" in s:
+        emoji = "▶️"
+    elif "instagram" in s or "insta" in s:
+        emoji = "📸"
+    elif "t.me" in s or "telegram" in s:
+        emoji = "✈️"
+    elif "facebook" in s or "fb." in s:
+        emoji = "📘"
+    elif "whatsapp" in s:
+        emoji = "💬"
+    else:
+        emoji = "🔗"
+    return f"{emoji} {label} par dekho"
+
+
+def gw_links(gw) -> list:
+    """Giveaway ke saare links (purane giveaway ka single video_url bhi chalta hai)."""
+    gw = gw or {}
+    links = [l for l in (gw.get("links") or []) if l.get("url")]
+    if not links and gw.get("video_url"):
+        links = [{"label": "", "url": gw["video_url"]}]
+    return links
+
+
+def fmt_when(dt) -> str:
+    """Winner time, jaise '12 Nov, 09:00 PM IST'."""
+    if dt is None:
+        return ""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(IST).strftime("%d %b, %I:%M %p") + " IST"
+
+
 def verify_init_data(init_data: str, bot_token: str, max_age: int = 86400):
     """Telegram Mini App initData verify karta hai. Valid ho to user dict, warna None."""
     if not init_data or len(init_data) > 4096:
@@ -156,12 +210,15 @@ async def build_shared(db: dict, ctx: dict) -> dict:
     sponsors, config, drops = db["sponsors"], db["config"], db["drops"]
 
     gw = await config.find_one({"_id": "giveaway"})
+    gl = gw_links(gw)
     shared = {
         "giveaway": {
             "active": bool(gw and not gw.get("closing")),
             "closing": bool(gw and gw.get("closing")),
-            "video_url": (gw or {}).get("video_url") or "",
-            "video_label": video_label((gw or {}).get("video_url") or ""),
+            "video_url": gl[0]["url"] if gl else "",
+            "video_label": link_text(gl[0]) if gl else "",
+            "links": [{"label": link_text(l), "url": l["url"]} for l in gl],
+            "winner_text": fmt_when((gw or {}).get("winner_at")),
         },
         "totals": {
             "users": await users.count_documents({"junk": {"$ne": True}}),
@@ -182,8 +239,11 @@ async def build_shared(db: dict, ctx: dict) -> dict:
              "tickets": int(e.get("tickets", 1)), "at": iso(e.get("entered_at"))}
         )
     async for w in winners.find({}).sort("declared_at", -1).limit(20):
+        allw = w.get("winners_all") or []
+        names = ", ".join(short_name(x.get("name")) for x in allw) if allw else short_name(w.get("name"))
+        uids = [x.get("id") for x in allw] if allw else [w.get("winner_id")]
         shared["winners"].append(
-            {"uid": w.get("winner_id"), "name": short_name(w.get("name")), "uname": w.get("username"),
+            {"uid": w.get("winner_id"), "uids": uids, "name": names, "uname": w.get("username"),
              "at": iso(w.get("declared_at")), "no": w.get("giveaway_no"), "entries": w.get("entries_count", 0)}
         )
     async for u in users.find({"ref_count": {"$gt": 0}}).sort("ref_count", -1).limit(20):
@@ -226,7 +286,7 @@ def personalize(sh: dict, uid: int) -> dict:
         "entries": [{"name": e["name"], "uname": e["uname"], "tickets": e["tickets"], "at": e["at"], "me": e["uid"] == uid}
                     for e in sh["entries"]],
         "winners": [{"name": w["name"], "uname": w["uname"], "at": w["at"], "no": w["no"], "entries": w["entries"],
-                     "me": w["uid"] == uid} for w in sh["winners"]],
+                     "me": uid in w["uids"]} for w in sh["winners"]],
         "board": {
             k: [{"name": x["name"], "uname": x["uname"], "count": x["count"], "me": x["uid"] == uid} for x in sh["board"][k]]
             for k in ("refs", "streaks")
