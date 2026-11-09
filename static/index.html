@@ -449,7 +449,9 @@ function renderHome(d){
   var s2=el("div","stat"); s2.appendChild(el("b",null,me.entered?num(me.tickets):"—")); s2.appendChild(el("span",null,me.entered?t("Aapke Tickets 🎟"):t("Entry baaki")));
   r.appendChild(s1); r.appendChild(s2); hero.appendChild(r);
   var cta=el("div","mt");
-  if(g.video_url){ cta.appendChild(B(g.video_label,"vio",function(){openLink(g.video_url);})); cta.lastChild.style.marginBottom="10px"; }
+  var gl=(g.links&&g.links.length)?g.links:(g.video_url?[{label:g.video_label,url:g.video_url}]:[]);
+  gl.forEach(function(l){ var vb=B(l.label,"vio",function(){openLink(l.url);}); vb.style.marginBottom="10px"; cta.appendChild(vb); });
+  if(g.winner_text) cta.appendChild(el("p",null,"⏰ Winner: "+g.winner_text));
   if(me.entered) cta.appendChild(el("p",null,t("✅ Entry confirm! Tickets badhane ke liye refer karein aur daily bonus lein.")));
   else if(g.active) cta.appendChild(B(t("🔑 Enter Code (Bot me)"),"gold",openBot));
   else cta.appendChild(el("p",null,t("Naya giveaway shuru hone par channel par notification aayega 🔔")));
