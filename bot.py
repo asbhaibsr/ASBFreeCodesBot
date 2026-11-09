@@ -7,6 +7,8 @@ Bot   : http://t.me/ASBFreeCodesBot
 Features: Giveaway codes, lock system, referral tickets, daily streak bonus,
 human verification (captcha), sponsor channels, leaderboard, random winner,
 promo broadcast (with button), winner proof post, website + Telegram Mini App.
+v2.1: multi-platform links, winner date/time, edit + repost giveaway, multi-winner,
+      entry-close at winner time, 1-hour reminder, past-winners proof button.
 """
 
 import asyncio
@@ -48,7 +50,7 @@ from pymongo import AsyncMongoClient, ReturnDocument
 from pymongo.errors import DuplicateKeyError
 
 import site_app
-from site_app import mask_name, short_name
+from site_app import fmt_when, gw_links, link_label, link_text, mask_name, short_name
 
 try:  # local testing ke liye .env support (Koyeb par env variables use hote hain)
     from dotenv import load_dotenv
@@ -235,22 +237,53 @@ def ref_link(uid: int) -> str:
     return f"https://t.me/{BOT_USERNAME}?start=ref_{uid}"
 
 
-def video_label(url: str) -> str:
-    u = (url or "").lower()
-    if "youtu" in u:
-        return "▶️ YouTube par dekho"
-    if "instagram" in u:
-        return "📸 Instagram par dekho"
-    return "🔗 Video dekho"
+def code_where_text(gw: Optional[dict]) -> str:
+    """'Code yahan milega' block (note + links ke liye)."""
+    gw = gw or {}
+    links, note = gw_links(gw), gw.get("note")
+    if not links and not note:
+        return ""
+    lines = ["📍 <b>Code yahan milega:</b>"]
+    if note:
+        lines.append(note)
+    if links:
+        lines.append("👇 <i>Neeche ke button se jaakar code dhundo</i>")
+    return "\n".join(lines)
 
 
-def video_post_text() -> str:
-    return (
-        "🎥 <b>Aaj ka Redeem Code is VIDEO ke andar hai!</b>\n\n"
-        "👇 Video dekho → code dhundo → bot me <b>Enter Code</b> dabake bhejo.\n"
-        "🎁 100% FREE — sahi code daalne walon ki entry hoti hai!\n\n"
-        "⚠️ Galat code baar-baar daaloge to 24 ghante ke liye lock lag jayega."
-    )
+def when_line(gw: Optional[dict]) -> str:
+    wa = (gw or {}).get("winner_at")
+    return f"⏰ <b>Winner:</b> {esc(fmt_when(wa))}" if wa else ""
+
+
+def code_links_rows(gw: Optional[dict]) -> list:
+    return [[btn(link_text(l), url=l["url"])] for l in gw_links(gw)]
+
+
+def giveaway_post_text(gw: dict) -> str:
+    parts = ["🎁 <b>GIVEAWAY LIVE HAI!</b> 🔥", ""]
+    where = code_where_text(gw)
+    if where:
+        parts += [where, ""]
+    wt = when_line(gw)
+    if wt:
+        parts += [wt, ""]
+    parts += [
+        "<b>Kaise bhaag lein?</b>",
+        "1️⃣ Upar bataye gaye jagah se <b>code</b> dhundo",
+        "2️⃣ <b>🔑 Enter Code</b> dabake bot me code bhejo",
+        "3️⃣ Winner ko <b>redeem code</b> seedha DM me milta hai 🏆",
+        "",
+        "✅ <b>100% FREE</b> — koi paise nahi maange jaate",
+        f"⚠️ <i>Galat code baar-baar daaloge to {LOCK_HOURS} ghante ka lock lag jayega.</i>",
+    ]
+    return "\n".join(parts)
+
+
+def giveaway_post_kb(gw: dict) -> InlineKeyboardMarkup:
+    rows = code_links_rows(gw)
+    rows.append([btn("🔑 Enter Code", url=f"https://t.me/{BOT_USERNAME}?start=code")])
+    return kb(*rows)
 
 
 def app_link() -> str:
@@ -262,12 +295,13 @@ def app_link() -> str:
 def main_menu_kb(verified: bool = True) -> InlineKeyboardMarkup:
     rows = []
     if not verified:
-        rows.append([btn("🛡 Verify Now (1 tap)", "verify")])
+        rows.append([btn("🛡 VERIFY KARO (1 tap)", "verify")])
     rows += [
-        [btn("📢 Join Channel", url=TASK_CHANNEL_LINK)],
-        [btn("❓ Help", "help")],
-        [btn("🔑 Enter Code", "enter_code")],
-        [btn("📱 Open App", web_app=WEBSITE_URL)],
+        [btn("🔑 CODE DAALO — GIVEAWAY ENTRY", "enter_code")],
+        [btn("📢 CHANNEL JOIN KARO", url=TASK_CHANNEL_LINK)],
+        [btn("🎁 DAILY BONUS & REWARDS", web_app=WEBSITE_URL)],
+        [btn("🏆 Pichhle Winners (Proof)", "winners")],
+        [btn("❓ Kaise Kaam Karta Hai?", "help")],
     ]
     return kb(*rows)
 
@@ -280,11 +314,13 @@ def channel_kb() -> InlineKeyboardMarkup:
     return kb([btn("📢 Join Channel", url=TASK_CHANNEL_LINK)])
 
 
-def retry_kb() -> InlineKeyboardMarkup:
-    return kb(
+def retry_kb(gw: Optional[dict] = None) -> InlineKeyboardMarkup:
+    rows = code_links_rows(gw) if gw else []
+    rows += [
+        [btn("🔑 Dobara Code Daalo", "enter_code")],
         [btn("📢 Join Channel", url=TASK_CHANNEL_LINK)],
-        [btn("🔑 Enter Code", "enter_code")],
-    )
+    ]
+    return kb(*rows)
 
 
 def back_kb() -> InlineKeyboardMarkup:
@@ -295,6 +331,7 @@ def admin_kb() -> InlineKeyboardMarkup:
     return kb(
         [btn("📊 Stats", "adm:stats")],
         [btn("➕ Add Giveaway Code", "adm:add")],
+        [btn("✏️ Edit Giveaway", "adm:edit"), btn("📣 Repost", "adm:repost")],
         [btn("🏆 Select Winner", "adm:winner")],
         [btn("📢 Broadcast", "adm:bc")],
         [btn("⚡ Free Code Drop", "adm:drop"), btn("🤝 Sponsors", "adm:sponsors")],
@@ -318,47 +355,61 @@ ADMIN_HOME_TEXT = "👑 <b>Admin Panel</b>\n\nKya karna chahte hain? 👇"
 def welcome_text(name: str) -> str:
     return (
         f"👋 <b>Namaste {esc(name)}!</b>\n"
-        f"Welcome to <b>{BOT_NAME}</b> 🎁\n\n"
-        "💯 Ye bot <b>100% FREE</b> hai — yahan <b>koi paise nahi maange jaate</b>, "
-        "aur kabhi maange bhi nahi jayenge.\n\n"
-        "📢 Bas hamara channel join karo, task poora karo aur "
-        "<b>Redeem Codes jeeto</b> 🎉\n"
-        "📱 <b>Open App</b> me Daily Bonus, Refer & Earn, 🎯 <b>Reward Cards (₹ redeem code)</b> aur ⚡ <b>Free Code Drops</b> milte hain!\n\n"
-        "👇 Neeche ke buttons se shuru karein:"
+        f"🎁 <b>{BOT_NAME}</b> me aapka swagat hai\n\n"
+        "✅ <b>Bilkul FREE</b> — <i>yahan kabhi paise, OTP ya password nahi maange jaate.</i>\n\n"
+        "<b>Kaise kaam karta hai? (sirf 3 step)</b>\n"
+        "1️⃣ Video / post me chhupa <b>code</b> dhundo\n"
+        "2️⃣ <b>🔑 CODE DAALO</b> dabake code bhejo\n"
+        "3️⃣ Winner ko <b>redeem code</b> seedha DM me milta hai 🏆\n\n"
+        "🎁 <b>Daily Bonus &amp; Rewards</b> me roz ka bonus, Refer &amp; Earn aur Free Code Drops milte hain — "
+        "ye <i>Telegram ke andar hi khulta hai, kuch install nahi karna.</i>\n\n"
+        "👇 <b>Shuru karne ke liye neeche button dabayein:</b>"
     )
 
 
 def help_text() -> str:
     return (
-        "❓ <b>Help — Kaise use karein?</b>\n\n"
-        "1️⃣ <b>Verify Now</b> dabakar 1-tap verification karein (fake accounts rokne ke liye).\n"
-        "2️⃣ <b>Join Channel</b> dabakar hamara channel join karein.\n"
-        "3️⃣ Channel par diye gaye <b>sahi link</b> se task poora karke <b>code</b> laayein.\n"
-        "4️⃣ <b>Enter Code</b> dabakar wo code yahan bhejein — entry confirm ✅\n"
-        "5️⃣ Winner ko redeem code seedha DM me milta hai 🏆\n\n"
-        "📱 <b>Open App</b> me:\n"
-        f"• 👥 Refer & Earn: har verified dost = +{REFERRAL_TICKETS} ticket\n"
-        "• 🎁 Daily Bonus: streak 3/7/14/30 din par extra tickets\n"
+        "❓ <b>Kaise kaam karta hai?</b>\n\n"
+        "1️⃣ <b>🛡 Verify</b> — 1 tap me verification (fake accounts rokne ke liye)\n"
+        "2️⃣ <b>📢 Channel Join</b> karein\n"
+        "3️⃣ Video / post me bataye gaye <b>📍 jagah</b> se code dhundein\n"
+        "4️⃣ <b>🔑 CODE DAALO</b> dabake code bhejein — entry confirm ✅\n"
+        "5️⃣ Winner ko redeem code seedha <b>DM</b> me milta hai 🏆\n\n"
+        "🎁 <b>Daily Bonus &amp; Rewards</b> me:\n"
+        f"• 👥 Refer &amp; Earn: har verified dost = +{REFERRAL_TICKETS} ticket\n"
+        "• 🔥 Daily Bonus: streak 3/7/14/30 din par extra tickets\n"
         "• 🎯 Reward Cards: streak / refer poore karo, ₹ redeem code pao\n"
         "• ⚡ Free Code Drops: time par sabse pehle CLAIM karo\n"
         "• 🎟 Live entries, 🏆 winners aur 🏅 leaderboard\n\n"
+        "🔒 <b>Safe hai?</b>\n"
+        "• Yahan kabhi paise, OTP, password ya card detail nahi maangi jaati\n"
+        "• Winner ka proof hamesha channel par post hota hai (<b>🏆 Pichhle Winners</b> button)\n"
+        "• Winner random pick (tickets ke hisaab se) se bhi chuna jata hai\n\n"
         "⚠️ <b>Dhyan rahe:</b>\n"
-        f"• {MAX_WRONG_ATTEMPTS} baar se zyada galat code daalne par aap "
-        f"<b>{LOCK_HOURS} ghante</b> ke liye lock ho jayenge.\n"
-        "• Ek giveaway me sirf <b>ek hi entry</b> hoti hai — spam na karein.\n\n"
+        f"• {MAX_WRONG_ATTEMPTS} baar se zyada galat code par <b>{LOCK_HOURS} ghante</b> ka lock lag jata hai\n"
+        "• Ek giveaway me sirf <b>ek hi entry</b> hoti hai — spam na karein\n\n"
         f"🆘 Support: {esc(SUPPORT_USERNAME)}"
     )
 
 
-def entry_confirmed_text(admin_msg: Optional[str], tickets: int = 1) -> str:
-    base = (
-        "🎉 <b>Badhai ho! Aapki entry confirm ho gayi hai</b> ✅\n\n"
-        f"🎟 Aapke tickets: <b>{tickets}</b>\n"
-        "⏳ Ab thoda <b>intezaar</b> karein — winner ka announcement jald hi hoga.\n"
-        f"📢 Updates ke liye channel par bane rahein:\n{TASK_CHANNEL_LINK}\n\n"
-        "🎁 Winner ko redeem code seedha uske personal DM me bheja jayega.\n"
-        "💡 Tickets badhane ke liye <b>Refer & Earn</b> aur <b>Daily Bonus</b> use karein!"
-    )
+def entry_confirmed_text(
+    admin_msg: Optional[str], tickets: int = 1, entry_no: Optional[int] = None, winner_at: Optional[datetime] = None
+) -> str:
+    lines = ["🎉 <b>Badhai ho! Aapki entry confirm ho gayi</b> ✅", ""]
+    if entry_no:
+        lines.append(f"🔢 Entry No: <b>#{entry_no}</b>")
+    lines.append(f"🎟 Aapke tickets: <b>{tickets}</b>")
+    if winner_at:
+        lines.append(f"⏰ Winner chuna jayega: <b>{esc(fmt_when(winner_at))}</b>")
+    lines += [
+        "",
+        "⏳ Ab bas <b>intezaar</b> karein — aur kuch karna zaroori nahi.",
+        "🏆 Winner ko redeem code seedha uske <b>personal DM</b> me milega.",
+        f"📢 Result aur proof channel par post hoga:\n{TASK_CHANNEL_LINK}",
+        "",
+        "💡 Tickets badhane ke liye <b>Refer &amp; Earn</b> aur <b>Daily Bonus</b> use karein (🎁 Rewards button).",
+    ]
+    base = "\n".join(lines)
     if admin_msg:
         base += "\n\n━━━━━━━━━━━━━━\n📩 <b>Admin ka message:</b>\n\n" + admin_msg
     return base
@@ -366,7 +417,7 @@ def entry_confirmed_text(admin_msg: Optional[str], tickets: int = 1) -> str:
 
 def winner_dm_text(code: str) -> str:
     return (
-        "🏆 <b>CONGRATULATIONS! Aap aaj ke WINNER ho!</b> 🎉\n\n"
+        "🏆 <b>CONGRATULATIONS! Aap WINNER ho!</b> 🎉\n\n"
         "🎁 Ye raha aapka <b>Redeem Code</b>:\n\n"
         f"<code>{esc(code)}</code>\n\n"
         "👆 Code par tap karke copy kar lein.\n\n"
@@ -375,13 +426,19 @@ def winner_dm_text(code: str) -> str:
     )
 
 
-def non_winner_text(winner_label: str) -> str:
+def non_winner_text(winner_label: str, n: int = 1) -> str:
+    who = (
+        f"🏆 <b>{winner_label}</b> aaj ka winner ban gaya hai 🎉"
+        if n == 1
+        else f"🏆 <b>{winner_label}</b> aaj ke {n} winners ban gaye hain 🎉"
+    )
     return (
-        "📢 <b>Aaj ka Winner declare ho gaya!</b>\n\n"
-        f"🏆 <b>{winner_label}</b> aaj ka winner ban gaya hai 🎉\n\n"
+        "📢 <b>Giveaway ka Winner declare ho gaya!</b>\n\n"
+        f"{who}\n\n"
         "😊 Aap niraash na hon — <b>agli baar zaroor try karein!</b>\n"
         "Hamare channel par bane rahein, kabhi-kabhi yahan <b>free redeem codes</b> "
         "bhi milte rehte hain 🎁\n\n"
+        "🔒 Winner ka proof channel par post ho chuka hai.\n"
         f"🆘 Support ke liye contact karein: {esc(SUPPORT_USERNAME)}"
     )
 
@@ -494,7 +551,7 @@ async def is_verified(uid: int) -> bool:
     return bool(u and u.get("verified"))
 
 
-async def set_state(uid: int, name: str, data: Optional[dict] = None, ttl_min: int = 15) -> None:
+async def set_state(uid: int, name: str, data: Optional[dict] = None, ttl_min: int = 30) -> None:
     await states.replace_one(
         {"_id": uid},
         {
@@ -547,22 +604,25 @@ async def add_tickets(uid: int, n: int) -> None:
         await users.update_one({"_id": uid}, {"$inc": {"bonus_tickets": n}})
 
 
-async def non_winner_ids(winner_id: int) -> list:
+async def non_winner_ids(winner_id) -> list:
+    """winner_id: ek id ya ids ka set/list — in sabko chhodkar baaki."""
+    skip = list(winner_id) if isinstance(winner_id, (set, list, tuple)) else [winner_id]
     if WINNER_NOTIFY == "all":
-        cur = users.find({"junk": {"$ne": True}, "_id": {"$ne": winner_id}}, {"_id": 1})
+        cur = users.find({"junk": {"$ne": True}, "_id": {"$nin": skip}}, {"_id": 1})
         return [d["_id"] async for d in cur]
-    ids = [d["_id"] async for d in entries.find({"_id": {"$ne": winner_id}}, {"_id": 1})]
+    ids = [d["_id"] async for d in entries.find({"_id": {"$nin": skip}}, {"_id": 1})]
     if not ids:
         return []
     cur = users.find({"_id": {"$in": ids}, "junk": {"$ne": True}}, {"_id": 1})
     return [d["_id"] async for d in cur]
 
 
-async def pick_random_winner() -> Optional[dict]:
+async def pick_random_winner(exclude: Optional[set] = None) -> Optional[dict]:
     """Tickets ke hisaab se weighted random pick (cap: 1 + MAX_BONUS_TICKETS)."""
     docs = [d async for d in entries.find({}, {"_id": 1, "tickets": 1})]
     junk = {d["_id"] async for d in users.find({"junk": True}, {"_id": 1})}
-    pool = [d for d in docs if d["_id"] not in junk]
+    skip = set(exclude or ())
+    pool = [d for d in docs if d["_id"] not in junk and d["_id"] not in skip]
     if not pool:
         return None
     cap = 1 + MAX_BONUS_TICKETS
@@ -1039,6 +1099,40 @@ async def cb_help(cb: CallbackQuery):
     )
 
 
+# ---------------------------------------------------------------- past winners (proof)
+@router.callback_query(F.data == "winners")
+async def cb_winners(cb: CallbackQuery):
+    await cb.answer()
+    await touch_user(cb.from_user)
+    docs = [d async for d in winners.find({}).sort("declared_at", -1).limit(5)]
+    if not docs:
+        text = (
+            "🏆 <b>Pichhle Winners</b>\n\n"
+            "Pehla winner jald hi yahan dikhega.\n"
+            "Har winner ka proof hamesha hamare channel par post hota hai 📢"
+        )
+    else:
+        lines = ["🏆 <b>Pichhle Winners (Proof)</b>\n"]
+        for d in docs:
+            allw = d.get("winners_all") or []
+            names = ", ".join(esc(mask_name(x.get("name"))) for x in allw) if allw else esc(mask_name(d.get("name")))
+            when = d["declared_at"].astimezone(IST).strftime("%d %b %Y") if d.get("declared_at") else ""
+            line = f"🎁 <b>#{d.get('giveaway_no', '?')}</b> — {names} — {when}"
+            if d.get("proof_url"):
+                line += f' — <a href="{esc(d["proof_url"])}">Proof dekho</a>'
+            lines.append(line)
+        lines.append("\n🔒 Naam privacy ke liye chhupaye gaye hain. Poora proof channel par hai 👇")
+        text = "\n".join(lines)
+    await safe_edit(
+        cb,
+        text,
+        kb(
+            [btn("📢 Channel par saare proof", url=TASK_CHANNEL_LINK)],
+            [btn("⬅️ Menu", "menu")],
+        ),
+    )
+
+
 # ---------------------------------------------------------------- verify
 @router.callback_query(F.data == "verify")
 async def cb_verify(cb: CallbackQuery):
@@ -1133,6 +1227,15 @@ async def enter_code_flow(user: User) -> None:
         )
         return
 
+    if entries_closed(gw):
+        await bot.send_message(
+            uid,
+            "⏰ <b>Entries band ho chuki hain</b>\n\n"
+            "Winner jald hi declare hoga — result channel par post hoga 📢",
+            reply_markup=channel_kb(),
+        )
+        return
+
     # 4) human verification
     if not await is_verified(uid):
         await send_captcha(uid, note="Pehle verification zaroori hai.\n\n")
@@ -1152,14 +1255,16 @@ async def enter_code_flow(user: User) -> None:
         )
         return
 
-    video = gw.get("video_url")
     await set_state(uid, "await_code", ttl_min=10)
-    await bot.send_message(
-        uid,
-        "🔑 <b>Apna code ab yahan bhejein</b> 👇\n\n(Cancel karne ke liye /cancel)"
-        + ("\n\n🎥 Code is video me hai — dekhne ke liye neeche button dabayein." if video else ""),
-        reply_markup=kb([btn(video_label(video), url=video)]) if video else None,
-    )
+    text = "🔑 <b>Apna code ab yahan bhejein</b> 👇\n\n<i>(Cancel karne ke liye /cancel)</i>"
+    where = code_where_text(gw)
+    if where:
+        text += "\n\n" + where
+    wt = when_line(gw)
+    if wt:
+        text += "\n\n" + wt
+    rows = code_links_rows(gw)
+    await bot.send_message(uid, text, reply_markup=kb(*rows) if rows else None)
 
 
 @router.callback_query(F.data == "enter_code")
@@ -1194,11 +1299,15 @@ async def handle_code(m: Message) -> None:
         await m.answer("⏳ Abhi giveaway active nahi hai. Channel par wait karein 📢", reply_markup=channel_kb())
         return
 
+    if entries_closed(gw):
+        await m.answer("⏰ <b>Entries band ho chuki hain.</b>\nWinner jald declare hoga 📢", reply_markup=channel_kb())
+        return
+
     typed = m.text.strip()
     if typed.casefold() == str(gw["code"]).strip().casefold():
         await accept_entry(m, gw)
     else:
-        await wrong_code(m)
+        await wrong_code(m, gw)
 
 
 async def accept_entry(m: Message, gw: dict) -> None:
@@ -1226,11 +1335,13 @@ async def accept_entry(m: Message, gw: dict) -> None:
     total = await entries.count_documents({})
 
     # bot ka fixed message + admin ka custom message  -> user ke DM me
-    text = entry_confirmed_text(gw.get("admin_message"), tickets)
+    text = entry_confirmed_text(gw.get("admin_message"), tickets, total, gw.get("winner_at"))
     if len(text) <= 4000:
         await m.answer(text, reply_markup=await user_menu(u.id))
     else:  # bahut lamba ho to 2 parts me
-        await m.answer(entry_confirmed_text(None, tickets), reply_markup=await user_menu(u.id))
+        await m.answer(
+            entry_confirmed_text(None, tickets, total, gw.get("winner_at")), reply_markup=await user_menu(u.id)
+        )
         await m.answer(gw["admin_message"])
 
     # entry details -> private log channel
@@ -1245,7 +1356,7 @@ async def accept_entry(m: Message, gw: dict) -> None:
     )
 
 
-async def wrong_code(m: Message) -> None:
+async def wrong_code(m: Message, gw: Optional[dict] = None) -> None:
     u = m.from_user
     doc = await users.find_one_and_update(
         {"_id": u.id},
@@ -1281,9 +1392,9 @@ async def wrong_code(m: Message) -> None:
     )
     await m.answer(
         "❌ <b>Galat code!</b>\n\n"
-        "Channel ke <b>sahi link</b> se code laayein aur dobara try karein.\n"
+        "📍 Code <b>video / post</b> me bataye gaye jagah se hi lijiye, phir dobara try karein.\n"
         f"{warn}",
-        reply_markup=retry_kb(),
+        reply_markup=retry_kb(gw),
     )
 
 
@@ -1532,6 +1643,8 @@ async def cb_admin(cb: CallbackQuery):
         if gw:
             status = "🔄 Winner process chal raha hai" if gw.get("closing") else "🟢 Active"
             gw_line = f"{status}\n🔑 Code: <code>{esc(gw['code'])}</code>"
+            if gw.get("winner_at"):
+                gw_line += f"\n⏰ Winner time: {esc(fmt_when(gw['winner_at']))}"
         else:
             gw_line = "🔴 Koi active giveaway nahi (Add Giveaway Code karein)"
         await safe_edit(
@@ -1558,28 +1671,41 @@ async def cb_admin(cb: CallbackQuery):
         if broadcast_lock.locked():
             await safe_edit(cb, "⏳ Abhi winner/broadcast process chal raha hai. Khatam hone par try karein.", admin_back_kb())
             return
-        await set_state(ADMIN_ID, "admin_add_code")
-        await safe_edit(
-            cb,
-            "➕ <b>Add Giveaway Code</b>\n\n"
-            "Step 1/3 — Naya <b>giveaway code</b> bhejein "
-            "(jo users ko sahi link se milega):",
-            admin_cancel_kb(),
-        )
+        gw = await get_giveaway()
+        if gw and not gw.get("closing"):
+            n = await entries.count_documents({})
+            await safe_edit(
+                cb,
+                "⚠️ <b>Ek giveaway pehle se chal raha hai</b>\n\n"
+                f"🔑 Code: <code>{esc(gw['code'])}</code>\n"
+                f"🎟 Entries: <b>{n}</b>\n\n"
+                "✏️ <b>Edit</b> — code / link / time badalna ho to (entries safe rahengi)\n"
+                f"🆕 <b>Naya</b> — purana giveaway aur {n} entries delete ho jayengi",
+                kb(
+                    [btn("✏️ Edit Giveaway", "adm:edit")],
+                    [btn("🆕 Naya Giveaway Shuru Karo", "adm:add_new")],
+                    [btn("⬅️ Admin Panel", "adm:home")],
+                ),
+            )
+            return
+        await start_add_flow(cb, reset=False)
+
+    elif action == "add_new":
+        if broadcast_lock.locked():
+            await safe_edit(cb, "⏳ Abhi winner/broadcast process chal raha hai. Khatam hone par try karein.", admin_back_kb())
+            return
+        await start_add_flow(cb, reset=True)
 
     # ---------------------------------------------------------- winner
     elif action == "winner":
         if broadcast_lock.locked():
             await safe_edit(cb, "⏳ Abhi ek process chal raha hai. Khatam hone par try karein.", admin_back_kb())
             return
-        await set_state(ADMIN_ID, "admin_win_id")
+        await set_state(ADMIN_ID, "admin_win_id", {"list": []})
         n = await entries.count_documents({})
         await safe_edit(
             cb,
-            "🏆 <b>Select Winner</b>\n\n"
-            f"Current entries: <b>{n}</b>\n\n"
-            "Step 1/2 — Winner ki <b>Telegram ID</b> bhejein (sirf number),\n"
-            "ya neeche <b>Random Pick</b> dabayein (tickets ke hisaab se weighted):",
+            win_pick_prompt(n, 0),
             kb(
                 [btn("🎲 Random Pick", "adm:win_rand")],
                 [btn("❌ Cancel", "adm:home")],
@@ -1587,12 +1713,14 @@ async def cb_admin(cb: CallbackQuery):
         )
 
     elif action == "win_rand":
-        pick = await pick_random_winner()
+        st = await get_state(ADMIN_ID)
+        lst = list(st["data"].get("list", [])) if st and st["name"] == "admin_win_id" else []
+        pick = await pick_random_winner({x["id"] for x in lst})
         if not pick:
             await safe_edit(cb, "⚠️ Koi entry nahi mili jisme se random pick ho sake.", admin_back_kb())
             return
         u = await users.find_one({"_id": pick["_id"]}) or {}
-        await set_state(ADMIN_ID, "admin_win_code", {"winner_id": pick["_id"], "random": True})
+        await set_state(ADMIN_ID, "admin_win_code", {"winner_id": pick["_id"], "random": True, "list": lst})
         await safe_edit(
             cb,
             "🎲 <b>Random Pick</b>\n\n"
@@ -1600,6 +1728,26 @@ async def cb_admin(cb: CallbackQuery):
             f"🎟 Tickets: <b>{pick.get('tickets', 1)}</b>\n\n"
             "Step 2/2 — Ab <b>Redeem Code</b> bhejein jo winner ko DM me jayega:",
             admin_cancel_kb(),
+        )
+
+    elif action == "win_more":
+        st = await get_state(ADMIN_ID)
+        if not st or st["name"] != "admin_win_confirm":
+            await safe_edit(cb, "⌛ Session expire ho gaya. Dobara Select Winner try karein.", admin_back_kb())
+            return
+        lst = list(st["data"]["list"])
+        if len(lst) >= MAX_WINNERS:
+            await safe_edit(cb, f"⚠️ Ek giveaway me max {MAX_WINNERS} winners ho sakte hain.", admin_back_kb())
+            return
+        await set_state(ADMIN_ID, "admin_win_id", {"list": lst})
+        n = await entries.count_documents({})
+        await safe_edit(
+            cb,
+            win_pick_prompt(n, len(lst)),
+            kb(
+                [btn("🎲 Random Pick", "adm:win_rand")],
+                [btn("❌ Cancel", "adm:home")],
+            ),
         )
 
     elif action == "win_go":
@@ -1613,7 +1761,7 @@ async def cb_admin(cb: CallbackQuery):
         data = st["data"]
         await clear_state(ADMIN_ID)
         await safe_edit(cb, "⏳ Winner process shuru ho gaya… report yahan aayegi.", admin_back_kb())
-        spawn(declare_winner(int(data["winner_id"]), str(data["code"])))
+        spawn(declare_winner(list(data["list"])))
 
     # ---------------------------------------------------------- broadcast
     elif action == "bc":
@@ -1683,14 +1831,177 @@ async def cb_admin(cb: CallbackQuery):
                 invalidate_user(i)
         await safe_edit(cb, f"✅ <b>{len(ids)}</b> junk users permanently remove ho gaye.", admin_back_kb())
 
-    # ---------------------------------------------------------- giveaway video skip
-    elif action == "add_skipvid":
+    # ---------------------------------------------------------- giveaway add: skips / publish
+    elif action in ("add_skiplinks", "add_skipnote", "add_skiptime", "add_skipmsg"):
+        need = {
+            "add_skiplinks": "admin_add_links",
+            "add_skipnote": "admin_add_note",
+            "add_skiptime": "admin_add_time",
+            "add_skipmsg": "admin_add_msg",
+        }[action]
         st = await get_state(ADMIN_ID)
-        if not st or st["name"] != "admin_add_video":
+        if not st or st["name"] != need:
             await safe_edit(cb, "⌛ Session expire ho gaya. Dobara Add Giveaway Code karein.", admin_back_kb())
             return
-        await set_state(ADMIN_ID, "admin_add_msg", {"code": st["data"]["code"], "video": None})
-        await safe_edit(cb, ADD_MSG_PROMPT, admin_cancel_kb())
+        data = dict(st["data"])
+        if action == "add_skiplinks":
+            await set_state(ADMIN_ID, "admin_add_note", {**data, "links": []})
+            await safe_edit(cb, add_note_prompt(False), add_skip_kb("add_skipnote"))
+        elif action == "add_skipnote":
+            await set_state(ADMIN_ID, "admin_add_time", {**data, "note": None})
+            await safe_edit(cb, ADD_TIME_PROMPT, add_time_kb())
+        elif action == "add_skiptime":
+            await set_state(ADMIN_ID, "admin_add_msg", {**data, "winner_at": None})
+            await safe_edit(cb, ADD_MSG_PROMPT, add_skip_kb("add_skipmsg"))
+        else:
+            nd = {**data, "admin_message": None}
+            await set_state(ADMIN_ID, "admin_add_confirm", nd)
+            text, markup = add_confirm_card(nd)
+            await safe_edit(cb, text, markup)
+
+    elif action == "add_tgl":
+        st = await get_state(ADMIN_ID)
+        if not st or st["name"] != "admin_add_confirm":
+            await safe_edit(cb, "⌛ Session expire ho gaya. Dobara Add Giveaway Code karein.", admin_back_kb())
+            return
+        nd = dict(st["data"])
+        nd["close_entries"] = not nd.get("close_entries")
+        await set_state(ADMIN_ID, "admin_add_confirm", nd)
+        text, markup = add_confirm_card(nd)
+        await safe_edit(cb, text, markup)
+
+    elif action == "add_publish":
+        st = await get_state(ADMIN_ID)
+        if not st or st["name"] != "admin_add_confirm":
+            await safe_edit(cb, "⌛ Session expire ho gaya. Dobara Add Giveaway Code karein.", admin_back_kb())
+            return
+        if broadcast_lock.locked():
+            await safe_edit(cb, "⏳ Abhi ek process chal raha hai, thodi der baad try karein.", admin_back_kb())
+            return
+        data = dict(st["data"])
+        await clear_state(ADMIN_ID)
+        text = await publish_giveaway(data)
+        await safe_edit(cb, text, admin_back_kb())
+        if data.get("admin_message"):
+            await bot.send_message(ADMIN_ID, "📩 <b>Admin message preview:</b>\n\n" + data["admin_message"])
+
+    # ---------------------------------------------------------- giveaway quick winner-time buttons
+    elif action.startswith("wt:"):
+        st = await get_state(ADMIN_ID)
+        if not st or st["name"] not in ("admin_add_time", "admin_edit_time"):
+            await safe_edit(cb, "⌛ Session expire ho gaya. Dobara try karein.", admin_back_kb())
+            return
+        try:
+            days = int(action.split(":", 1)[1])
+        except ValueError:
+            return
+        wa = winner_at_days(days)
+        if wa <= now_utc():
+            await bot.send_message(ADMIN_ID, "⏰ Ye time nikal chuka hai, koi aur option chunein.")
+            return
+        if st["name"] == "admin_add_time":
+            await set_state(ADMIN_ID, "admin_add_msg", {**st["data"], "winner_at": wa.isoformat()})
+            await safe_edit(
+                cb, f"✅ Winner time: <b>{esc(fmt_when(wa))}</b>\n\n" + ADD_MSG_PROMPT, add_skip_kb("add_skipmsg")
+            )
+        else:
+            gw = await get_giveaway()
+            if not gw or gw.get("closing"):
+                await safe_edit(cb, "⚠️ Abhi koi active giveaway nahi hai.", admin_back_kb())
+                return
+            await clear_state(ADMIN_ID)
+            upd = {"winner_at": wa, **winner_time_flags(wa)}
+            await config.update_one({"_id": "giveaway"}, {"$set": upd})
+            live_state["v"] += 1
+            gw.update(upd)
+            note = "✅ <b>Winner time update ho gaya!</b>\n📣 Channel post: " + await refresh_channel_post(gw)
+            text, markup = await edit_card(gw, note)
+            await safe_edit(cb, text, markup)
+
+    # ---------------------------------------------------------- giveaway edit / repost
+    elif action == "edit":
+        await clear_state(ADMIN_ID)
+        gw = await get_giveaway()
+        if not gw:
+            await safe_edit(cb, "🔴 Koi active giveaway nahi hai.\n\nPehle <b>Add Giveaway Code</b> karein.", admin_back_kb())
+            return
+        if gw.get("closing"):
+            await safe_edit(cb, "🔄 Winner process chal raha hai — abhi edit nahi ho sakta.", admin_back_kb())
+            return
+        text, markup = await edit_card(gw)
+        await safe_edit(cb, text, markup)
+
+    elif action.startswith("ed:"):
+        field = action.split(":", 1)[1]
+        gw = await get_giveaway()
+        if field not in EDIT_PROMPTS or not gw or gw.get("closing"):
+            await safe_edit(cb, "⚠️ Abhi koi active giveaway nahi hai.", admin_back_kb())
+            return
+        await set_state(ADMIN_ID, f"admin_edit_{field}")
+        rows = time_quick_rows() if field == "time" else []
+        if field != "code":
+            rows.append([btn("🗑 Hata do", f"adm:ed_clear:{field}")])
+        rows.append([btn("↩️ Wapas", "adm:edit")])
+        await safe_edit(cb, EDIT_PROMPTS[field], kb(*rows))
+
+    elif action.startswith("ed_clear:"):
+        field = action.split(":", 1)[1]
+        gw = await get_giveaway()
+        if field not in ("links", "note", "time", "msg") or not gw or gw.get("closing"):
+            await safe_edit(cb, "⚠️ Abhi koi active giveaway nahi hai.", admin_back_kb())
+            return
+        upd = {
+            "links": {"links": [], "video_url": None},
+            "note": {"note": None},
+            "time": {"winner_at": None, "close_entries": False},
+            "msg": {"admin_message": None},
+        }[field]
+        await clear_state(ADMIN_ID)
+        await config.update_one({"_id": "giveaway"}, {"$set": upd})
+        live_state["v"] += 1
+        gw.update(upd)
+        note = "🗑 <b>Hata diya gaya.</b>"
+        if field in ("links", "note", "time"):
+            note += "\n📣 Channel post: " + await refresh_channel_post(gw)
+        text, markup = await edit_card(gw, note)
+        await safe_edit(cb, text, markup)
+
+    elif action == "ed_tgl":
+        gw = await get_giveaway()
+        if not gw or gw.get("closing"):
+            await safe_edit(cb, "⚠️ Abhi koi active giveaway nahi hai.", admin_back_kb())
+            return
+        if not gw.get("winner_at"):
+            await bot.send_message(ADMIN_ID, "⚠️ Pehle ⏰ Winner Time set karein, phir ye option chalega.")
+            return
+        upd = {"close_entries": not gw.get("close_entries")}
+        await config.update_one({"_id": "giveaway"}, {"$set": upd})
+        gw.update(upd)
+        text, markup = await edit_card(gw)
+        await safe_edit(cb, text, markup)
+
+    elif action == "repost":
+        gw = await get_giveaway()
+        if not gw or gw.get("closing"):
+            await safe_edit(
+                cb,
+                "⚠️ Abhi koi active giveaway nahi hai.\n\n"
+                "Jo giveaway khatam ho chuka hai uski post dobara nahi bheji jati.",
+                admin_back_kb(),
+            )
+            return
+        mid = await send_giveaway_post(gw)
+        if not mid:
+            await safe_edit(cb, "⚠️ Post nahi gayi (bot ko channel me admin banayein).", admin_back_kb())
+            return
+        old = gw.get("post_msg_id")
+        deleted = await drop_channel_post(old) if old else False
+        await config.update_one({"_id": "giveaway"}, {"$set": {"post_msg_id": mid}})
+        await safe_edit(
+            cb,
+            "✅ <b>Post dubara bhej di gayi!</b>" + ("\n🗑 Purani post delete ho gayi." if deleted else ""),
+            kb([btn("✏️ Edit Giveaway", "adm:edit")], [btn("⬅️ Admin Panel", "adm:home")]),
+        )
 
     # ---------------------------------------------------------- rewards (admin)
     elif action == "rw":
@@ -1881,84 +2192,517 @@ async def cb_admin(cb: CallbackQuery):
 # ======================================================================
 #  ADMIN: STEP-BY-STEP INPUTS (state machine)
 # ======================================================================
-ADD_MSG_PROMPT = (
-    "Step 3/3 — Ab <b>custom admin message</b> bhejein jo sahi code daalne par "
-    "user ko DM me jayega (bold/italic/link formatting chalegi):"
+# ---------------------------------------------------------------- giveaway: constants
+MAX_LINKS = 4
+MAX_NOTE = 300
+MAX_WINNERS = 5
+URL_RE = re.compile(r"https?://\S+", re.I)
+URL_OK_RE = re.compile(r"^https?://[^\s/]+\.[^\s/]+", re.I)
+MONTHS = {
+    "jan": 1, "feb": 2, "mar": 3, "apr": 4, "may": 5, "jun": 6,
+    "jul": 7, "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+ADD_LINKS_PROMPT = (
+    "Step 2/5 — 📍 <b>Code kahan milega?</b>\n"
+    "Link bhejein, <b>har line me: platform - link</b>\n\n"
+    "<code>Instagram - https://instagram.com/reel/xxxx\n"
+    "YouTube - https://youtu.be/xxxx</code>\n\n"
+    "• 1 se 4 link tak\n"
+    "• Dono platform par video hai to dono line bhejein — user kisi par bhi ja sakta hai\n"
+    "• Link nahi hai (code kisi aur jagah hai) to <b>Skip</b> dabayein"
 )
+LINKS_ERR = (
+    "⚠️ Link samajh nahi aaya. Is format me bhejein (har line me ek):\n\n"
+    "<code>Instagram - https://instagram.com/reel/xxxx</code>\n"
+    "<code>YouTube - https://youtu.be/xxxx</code>"
+)
+ADD_TIME_PROMPT = (
+    "Step 4/5 — ⏰ <b>Winner kab chuna jayega?</b>\n"
+    "Date aur time bhejein (IST):\n\n"
+    "<code>12 nov 9pm</code>\n"
+    "<code>kal 8:30pm</code>\n"
+    "<code>15/11 21:00</code>\n\n"
+    "ya neeche ka button dabayein. Nahi dena to <b>Skip</b>."
+)
+TIME_ERR = (
+    "⚠️ Time samajh nahi aaya ya nikal chuka hai. Aise bhejein:\n\n"
+    "<code>12 nov 9pm</code>  |  <code>kal 8:30pm</code>  |  <code>15/11 21:00</code>"
+)
+ADD_MSG_PROMPT = (
+    "Step 5/5 — 📩 <b>Admin message</b> bhejein jo sahi code daalne par user ko DM me jayega "
+    "(bold/italic/link formatting chalegi).\nNahi dena to <b>Skip</b> dabayein."
+)
+EDIT_PROMPTS = {
+    "code": "🔑 <b>Naya giveaway code</b> bhejein.\n\n<i>Jo log pehle entry kar chuke hain unki entry safe rahegi.</i>",
+    "links": (
+        "📍 <b>Naye links</b> bhejein, har line me <code>platform - link</code>:\n\n"
+        "<code>Instagram - https://...\nYouTube - https://...</code>\n\n"
+        "<i>Purane saare links badal jayenge.</i>"
+    ),
+    "note": "📝 <b>Naya note</b> bhejein (code kahan / kaise milega), max 300 characters. Bold/italic chalega.",
+    "time": (
+        "⏰ <b>Winner ka naya date/time</b> bhejein (IST):\n\n"
+        "<code>12 nov 9pm</code>  |  <code>kal 8:30pm</code>  |  <code>15/11 21:00</code>\n\n"
+        "ya neeche button dabayein 👇"
+    ),
+    "msg": "📩 <b>Naya admin message</b> bhejein jo sahi code daalne par user ko DM me jayega.",
+}
 
 
+def add_note_prompt(has_links: bool) -> str:
+    if has_links:
+        return (
+            "Step 3/5 — 📝 <b>Extra note</b> (optional): code kahan / kaise milega, jaise <i>video ke last me</i>.\n"
+            f"Bold/italic chalega (max {MAX_NOTE} characters). Nahi dena to <b>Skip</b>."
+        )
+    return (
+        "Step 3/5 — 📝 <b>Code kahan milega?</b> Likh kar batayein, jaise <i>Channel ke pinned post me</i>.\n"
+        f"Bold/italic chalega (max {MAX_NOTE} characters). Nahi dena to <b>Skip</b>."
+    )
+
+
+# ---------------------------------------------------------------- giveaway: parsing
+def parse_links(text: str) -> tuple:
+    """'Instagram - https://..' (har line me) -> ([{'label','url'}], galat_links_ki_ginti)."""
+    text = text or ""
+    out, bad, pos = [], 0, 0
+    for mt in URL_RE.finditer(text):
+        seg = text[pos:mt.start()]
+        pos = mt.end()
+        url = mt.group(0).rstrip(".,;)>")
+        if not URL_OK_RE.match(url) or len(url) > 300:
+            bad += 1
+            continue
+        lines = [x for x in seg.splitlines() if x.strip()]
+        label = lines[-1].strip() if lines else ""
+        label = re.sub(r"[\s\-–—|:=>•*]+$", "", label)
+        label = re.sub(r"^[\s\-–—|:=>•*]+", "", label)
+        out.append({"label": label[:20], "url": url})
+    return out[:MAX_LINKS], bad
+
+
+def parse_winner_time(text: str, now: Optional[datetime] = None) -> Optional[datetime]:
+    """'12 nov 9pm', 'kal 8:30pm', '15/11 21:00', '3 din 9pm', '9pm' -> UTC datetime (time IST maana jata hai)."""
+    now = now or now_utc()
+    local_now = now.astimezone(IST)
+    s = (text or "").strip().lower()
+    if not s or len(s) > 40:
+        return None
+    m = re.search(r"(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)\b", s)
+    if m:
+        h, mi = int(m.group(1)), int(m.group(2) or 0)
+        if not 1 <= h <= 12 or mi > 59:
+            return None
+        hh, mm = h % 12 + (12 if m.group(3) == "pm" else 0), mi
+    else:
+        m = re.search(r"\b(\d{1,2}):(\d{2})\b", s)
+        if not m:
+            return None
+        hh, mm = int(m.group(1)), int(m.group(2))
+        if hh > 23 or mm > 59:
+            return None
+    s = (s[:m.start()] + " " + s[m.end():]).strip()
+
+    mon = "jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec"
+    d = mth = y = None
+    mt = re.search(rf"(\d{{1,2}})\s*[-/ ]?\s*({mon})[a-z]*(?:[\s,/-]+(\d{{4}}))?", s)
+    if mt:
+        d, mth, y = int(mt.group(1)), MONTHS[mt.group(2)], mt.group(3)
+    else:
+        mt = re.search(rf"({mon})[a-z]*\s*[-/ ]?\s*(\d{{1,2}})(?:[\s,/-]+(\d{{4}}))?", s)
+        if mt:
+            mth, d, y = MONTHS[mt.group(1)], int(mt.group(2)), mt.group(3)
+        else:
+            mt = re.search(r"(\d{1,2})[-/.](\d{1,2})(?:[-/.](\d{2,4}))?", s)
+            if mt:
+                d, mth, y = int(mt.group(1)), int(mt.group(2)), mt.group(3)
+
+    offset = None
+    if d is None:
+        if re.search(r"\b(aaj|today)\b", s):
+            offset = 0
+        elif re.search(r"\b(kal|tomorrow)\b", s):
+            offset = 1
+        elif re.search(r"\bparso\b", s):
+            offset = 2
+        else:
+            mt = re.search(r"(\d{1,3})\s*(din|day|days)\b", s)
+            if mt:
+                offset = int(mt.group(1))
+    try:
+        if d is not None:
+            if y:
+                yy = int(y)
+                yy = yy + 2000 if yy < 100 else yy
+                dt = datetime(yy, mth, d, hh, mm, tzinfo=IST)
+            else:
+                dt = datetime(local_now.year, mth, d, hh, mm, tzinfo=IST)
+                if dt < local_now - timedelta(days=30):
+                    dt = datetime(local_now.year + 1, mth, d, hh, mm, tzinfo=IST)
+        else:
+            dt = (local_now + timedelta(days=offset or 0)).replace(hour=hh, minute=mm, second=0, microsecond=0)
+            if offset is None and dt <= local_now:
+                dt += timedelta(days=1)
+    except ValueError:
+        return None
+    return dt.astimezone(timezone.utc)
+
+
+def winner_at_days(days: int) -> datetime:
+    """Aaj se `days` din baad, raat 9 baje (IST) -> UTC."""
+    local = (datetime.now(IST) + timedelta(days=days)).replace(hour=21, minute=0, second=0, microsecond=0)
+    return local.astimezone(timezone.utc)
+
+
+def winner_time_flags(wa: Optional[datetime]) -> dict:
+    """Winner time badalne par reminder flags reset."""
+    if not wa:
+        return {"admin_pinged": False, "users_reminded": True}
+    return {"admin_pinged": False, "users_reminded": (wa - now_utc()) < timedelta(hours=1)}
+
+
+def entries_closed(gw: dict) -> bool:
+    wa = (gw or {}).get("winner_at")
+    if not (gw.get("close_entries") and wa):
+        return False
+    if wa.tzinfo is None:
+        wa = wa.replace(tzinfo=timezone.utc)
+    return wa <= now_utc()
+
+
+# ---------------------------------------------------------------- giveaway: admin cards
+def draft_gw(data: dict) -> dict:
+    wa = data.get("winner_at")
+    if isinstance(wa, str):
+        wa = datetime.fromisoformat(wa)
+    return {
+        "code": data["code"],
+        "links": data.get("links") or [],
+        "note": data.get("note"),
+        "winner_at": wa,
+        "close_entries": bool(data.get("close_entries")),
+        "admin_message": data.get("admin_message"),
+    }
+
+
+def giveaway_summary(gw: dict) -> str:
+    links = gw_links(gw)
+    names = ", ".join(esc(link_label(l.get("label"), l["url"])) for l in links) or "—"
+    wa = gw.get("winner_at")
+    lines = [
+        f"🔑 Code: <code>{esc(gw.get('code'))}</code>",
+        f"📍 Links: {names}",
+        f"📝 Note: {gw['note']}" if gw.get("note") else "📝 Note: —",
+        f"⏰ Winner time: <b>{esc(fmt_when(wa))}</b>" if wa else "⏰ Winner time: —",
+        f"🔒 Winner time par entries band: {'✅ ON' if gw.get('close_entries') else 'OFF'}",
+        f"📩 Admin message: {'✅ set' if gw.get('admin_message') else '—'}",
+    ]
+    return "\n".join(lines)
+
+
+def add_skip_kb(skip_cb: str) -> InlineKeyboardMarkup:
+    return kb([btn("⏭ Skip", f"adm:{skip_cb}")], [btn("❌ Cancel", "adm:home")])
+
+
+def time_quick_rows() -> list:
+    first = []
+    if winner_at_days(0) > now_utc():
+        first.append(btn("🌙 Aaj 9 PM", "adm:wt:0"))
+    first.append(btn("🌅 Kal 9 PM", "adm:wt:1"))
+    return [first, [btn("📅 3 din baad 9 PM", "adm:wt:3"), btn("📅 7 din baad 9 PM", "adm:wt:7")]]
+
+
+def add_time_kb() -> InlineKeyboardMarkup:
+    return kb(*time_quick_rows(), [btn("⏭ Skip", "adm:add_skiptime")], [btn("❌ Cancel", "adm:home")])
+
+
+def add_confirm_card(data: dict) -> tuple:
+    gw = draft_gw(data)
+    text = "👀 <b>Preview — Giveaway publish karein?</b>\n\n" + giveaway_summary(gw)
+    if data.get("reset"):
+        text += "\n\n⚠️ Purana giveaway aur sabhi purani entries delete hongi."
+    if gw["links"] or gw["note"]:
+        text += "\n\n📣 Channel par post bhi jayegi."
+    rows = [[btn("✅ Publish Giveaway", "adm:add_publish")]]
+    if gw["winner_at"]:
+        rows.append([btn("🔒 Entries band at winner time: " + ("ON ✅" if gw["close_entries"] else "OFF"), "adm:add_tgl")])
+    rows.append([btn("❌ Cancel", "adm:home")])
+    return text, kb(*rows)
+
+
+async def start_add_flow(cb: CallbackQuery, reset: bool) -> None:
+    await set_state(ADMIN_ID, "admin_add_code", {"reset": reset})
+    await safe_edit(
+        cb,
+        "➕ <b>Add Giveaway Code</b>\n\n"
+        "Step 1/5 — Naya <b>giveaway code</b> bhejein (jo users ko sahi jagah se milega):"
+        + ("\n\n⚠️ <i>Purana giveaway aur purani entries delete hongi.</i>" if reset else ""),
+        admin_cancel_kb(),
+    )
+
+
+async def edit_card(gw: dict, note: str = "") -> tuple:
+    n = await entries.count_documents({})
+    text = (
+        (note + "\n\n" if note else "")
+        + "✏️ <b>Edit Giveaway</b>\n\n"
+        + giveaway_summary(gw)
+        + f"\n🎟 Entries: <b>{n}</b>\n\nJo badalna hai wo button dabayein 👇"
+    )
+    ent = "🔒 Entries band: " + ("ON ✅" if gw.get("close_entries") else "OFF")
+    markup = kb(
+        [btn("🔑 Code", "adm:ed:code"), btn("📍 Links", "adm:ed:links")],
+        [btn("📝 Note", "adm:ed:note"), btn("⏰ Winner Time", "adm:ed:time")],
+        [btn("📩 Message", "adm:ed:msg"), btn(ent, "adm:ed_tgl")],
+        [btn("📣 Repost Post", "adm:repost")],
+        [btn("⬅️ Admin Panel", "adm:home")],
+    )
+    return text, markup
+
+
+def win_pick_prompt(n_entries: int, k: int) -> str:
+    who = "Winner ki" if k == 0 else f"Winner #{k + 1} ki"
+    return (
+        "🏆 <b>Select Winner</b>\n\n"
+        f"Current entries: <b>{n_entries}</b>\n\n"
+        f"Step 1/2 — {who} <b>Telegram ID</b> bhejein (sirf number),\n"
+        "ya neeche <b>Random Pick</b> dabayein (tickets ke hisaab se weighted):"
+    )
+
+
+async def win_confirm_card(lst: list) -> tuple:
+    rows = []
+    for i, x in enumerate(lst, 1):
+        u = await users.find_one({"_id": x["id"]}) or {}
+        entry = await entries.find_one({"_id": x["id"]})
+        ent = f"✅ tickets: {entry.get('tickets', 1)}" if entry else "❌ entry nahi daali"
+        rnd = " 🎲" if x.get("random") else ""
+        rows.append(
+            f"{i}. {esc(u.get('name'))} (<code>{x['id']}</code>){rnd}\n"
+            f"   🎟 {ent}\n"
+            f"   🎁 Code: <code>{esc(x['code'])}</code>"
+        )
+    n_targets = len(await non_winner_ids({x["id"] for x in lst}))
+    gw = await get_giveaway()
+    text = (
+        "🏆 <b>Confirm " + ("Winners" if len(lst) > 1 else "Winner") + "</b>\n\n"
+        + "\n\n".join(rows)
+        + f"\n\n📨 Non-winners ko message jayega: <b>{n_targets}</b>\n"
+        f"🔑 Giveaway ka data delete hoga: {'✅' if gw else '— (set nahi hai)'}\n\n"
+        "Confirm karne par:\n"
+        "1️⃣ Har winner ke DM me uska code jayega\n"
+        "2️⃣ Baaki sabko winner-announcement jayega\n"
+        "3️⃣ Giveaway ka poora data (code, links, entries) delete ho jayega\n"
+        "4️⃣ Channel par winner proof post hoga\n\n"
+        "<b>Ye action undo nahi hota.</b>"
+    )
+    brows = [[btn("✅ Confirm & Declare", "adm:win_go")]]
+    if len(lst) < MAX_WINNERS:
+        brows.append([btn("➕ Ek aur winner", "adm:win_more")])
+    brows.append([btn("❌ Cancel", "adm:home")])
+    return text, kb(*brows)
+
+
+# ---------------------------------------------------------------- giveaway: channel post helpers
+async def send_giveaway_post(gw: dict) -> Optional[int]:
+    res, msg = await deliver_result(
+        TASK_CHANNEL_ID,
+        lambda cid: bot.send_message(cid, giveaway_post_text(gw), reply_markup=giveaway_post_kb(gw)),
+    )
+    return msg.message_id if res == OK and msg else None
+
+
+async def drop_channel_post(msg_id) -> bool:
+    if not msg_id:
+        return False
+    try:
+        await bot.delete_message(TASK_CHANNEL_ID, int(msg_id))
+        return True
+    except TelegramAPIError:
+        return False
+
+
+async def refresh_channel_post(gw: dict) -> str:
+    mid = gw.get("post_msg_id")
+    if not mid:
+        return "— (channel post nahi hai, 📣 Repost karein)"
+    try:
+        await bot.edit_message_text(
+            giveaway_post_text(gw), chat_id=TASK_CHANNEL_ID, message_id=int(mid), reply_markup=giveaway_post_kb(gw)
+        )
+        return "✅ update ho gayi"
+    except TelegramBadRequest as e:
+        if "not modified" in str(e).lower():
+            return "✅ (pehle jaisi hi hai)"
+        return "⚠️ update nahi hui (📣 Repost use karein)"
+    except TelegramAPIError:
+        return "⚠️ update nahi hui (📣 Repost use karein)"
+
+
+async def close_channel_post(gw: Optional[dict]) -> None:
+    """Winner declare hone par purani giveaway post 'khatam' ho jati hai (links/buttons hat jate hain)."""
+    mid = (gw or {}).get("post_msg_id")
+    if not mid:
+        return
+    try:
+        await bot.edit_message_text(
+            "🏁 <b>Ye giveaway khatam ho gaya</b>\n\n"
+            "🏆 Winner declare ho chuka hai — proof channel par post hua hai.\n\n"
+            "🤖 Agle giveaway ke liye bot ke saath bane rahein 👇",
+            chat_id=TASK_CHANNEL_ID,
+            message_id=int(mid),
+            reply_markup=kb([btn("🤖 Bot kholo", url=f"https://t.me/{BOT_USERNAME}")]),
+        )
+    except TelegramAPIError:
+        pass
+
+
+async def publish_giveaway(data: dict) -> str:
+    d = draft_gw(data)
+    links = d["links"]
+    old = await get_giveaway() or {}
+    if data.get("reset"):
+        await drop_channel_post(old.get("post_msg_id"))
+        await entries.delete_many({})
+        await users.update_many({}, {"$set": {"wrong_count": 0, "locked_until": None}})
+    doc = {
+        "_id": "giveaway",
+        "code": d["code"],
+        "admin_message": d["admin_message"],
+        "links": links,
+        "video_url": links[0]["url"] if links else None,
+        "note": d["note"],
+        "winner_at": d["winner_at"],
+        "close_entries": d["close_entries"],
+        "created_at": now_utc(),
+        "closing": False,
+        "post_msg_id": None,
+        **winner_time_flags(d["winner_at"]),
+    }
+    await config.replace_one({"_id": "giveaway"}, doc, upsert=True)
+    live_state["v"] += 1
+    post_line = ""
+    if links or doc["note"]:
+        mid = await send_giveaway_post(doc)
+        if mid:
+            await config.update_one({"_id": "giveaway"}, {"$set": {"post_msg_id": mid}})
+        post_line = "\n📣 Channel post: " + ("✅ ho gayi" if mid else "⚠️ nahi gayi (bot ko channel me admin banayein)")
+    n = await entries.count_documents({})
+    return "✅ <b>Giveaway set ho gaya!</b>\n\n" + giveaway_summary(doc) + f"\n🎟 Maujooda entries: <b>{n}</b>" + post_line
+
+
+# ======================================================================
+#  ADMIN: STEP-BY-STEP INPUTS HANDLER (state machine)
+# ======================================================================
 async def handle_admin_state(m: Message, st: dict) -> None:
     name, data = st["name"], st.get("data", {})
 
-    # ---- Add Giveaway Code: step 1 (code)
+    # ---- Add Giveaway: step 1 (code)
     if name == "admin_add_code":
         if not m.text or not m.text.strip():
             await m.answer("⚠️ Code text me bhejein.")
             return
         code = m.text.strip()
-        await set_state(ADMIN_ID, "admin_add_video", {"code": code})
+        await set_state(ADMIN_ID, "admin_add_links", {**data, "code": code})
         await m.answer(
-            f"✅ Code mil gaya: <code>{esc(code)}</code>\n\n"
-            "Step 2/3 — 🎥 <b>Video link</b> bhejein (YouTube / Instagram) jisme code diya gaya hai.\n"
-            "Bot channel par ek achhi post bana dega. Video nahi hai to <b>Skip</b> dabayein.",
-            reply_markup=kb([btn("⏭ Skip (bina video)", "adm:add_skipvid")], [btn("❌ Cancel", "adm:home")]),
+            f"✅ Code mil gaya: <code>{esc(code)}</code>\n\n" + ADD_LINKS_PROMPT,
+            reply_markup=add_skip_kb("add_skiplinks"),
         )
 
-    # ---- Add Giveaway Code: step 2 (video link)
-    elif name == "admin_add_video":
-        url = (m.text or "").strip()
-        if not url.lower().startswith(("http://", "https://")) or " " in url or len(url) > 300:
-            await m.answer("⚠️ Valid http(s) video link bhejein, ya Skip dabayein.")
+    # ---- Add Giveaway: step 2 (links)
+    elif name == "admin_add_links":
+        links, bad = parse_links(m.text or "")
+        if not links:
+            await m.answer(LINKS_ERR, reply_markup=add_skip_kb("add_skiplinks"))
             return
-        await set_state(ADMIN_ID, "admin_add_msg", {"code": data["code"], "video": url})
-        await m.answer("✅ Video link mil gaya.\n\n" + ADD_MSG_PROMPT, reply_markup=admin_cancel_kb())
+        await set_state(ADMIN_ID, "admin_add_note", {**data, "links": links})
+        names = ", ".join(esc(link_label(l.get("label"), l["url"])) for l in links)
+        extra = f"\n⚠️ {bad} link galat tha, hata diya." if bad else ""
+        await m.answer(
+            f"✅ {len(links)} link mil gaye: <b>{names}</b>{extra}\n\n" + add_note_prompt(True),
+            reply_markup=add_skip_kb("add_skipnote"),
+        )
 
-    # ---- Add Giveaway Code: step 3 (admin message)
+    # ---- Add Giveaway: step 3 (note)
+    elif name == "admin_add_note":
+        if not m.text or not m.text.strip():
+            await m.answer("⚠️ Note text me bhejein, ya Skip dabayein.", reply_markup=add_skip_kb("add_skipnote"))
+            return
+        if len(m.text) > MAX_NOTE:
+            await m.answer(f"⚠️ Note bahut lamba hai (max {MAX_NOTE} characters). Chhota karke bhejein.")
+            return
+        await set_state(ADMIN_ID, "admin_add_time", {**data, "note": m.html_text})
+        await m.answer("✅ Note mil gaya.\n\n" + ADD_TIME_PROMPT, reply_markup=add_time_kb())
+
+    # ---- Add Giveaway: step 4 (winner time)
+    elif name == "admin_add_time":
+        wa = parse_winner_time(m.text or "")
+        if not wa or wa <= now_utc():
+            await m.answer(TIME_ERR, reply_markup=add_time_kb())
+            return
+        await set_state(ADMIN_ID, "admin_add_msg", {**data, "winner_at": wa.isoformat()})
+        await m.answer(
+            f"✅ Winner time: <b>{esc(fmt_when(wa))}</b>\n\n" + ADD_MSG_PROMPT,
+            reply_markup=add_skip_kb("add_skipmsg"),
+        )
+
+    # ---- Add Giveaway: step 5 (admin message) -> preview
     elif name == "admin_add_msg":
         if not m.text:
-            await m.answer("⚠️ Message text me bhejein.")
+            await m.answer("⚠️ Message text me bhejein, ya Skip dabayein.", reply_markup=add_skip_kb("add_skipmsg"))
             return
-        if broadcast_lock.locked():
-            await m.answer("⏳ Abhi ek process chal raha hai, thodi der baad try karein.")
+        nd = {**data, "admin_message": m.html_text}
+        await set_state(ADMIN_ID, "admin_add_confirm", nd)
+        text, markup = add_confirm_card(nd)
+        await m.answer(text, reply_markup=markup)
+
+    # ---- Edit Giveaway: ek field
+    elif name.startswith("admin_edit_"):
+        field = name[len("admin_edit_"):]
+        gw = await get_giveaway()
+        if not gw or gw.get("closing"):
+            await clear_state(ADMIN_ID)
+            await m.answer("⚠️ Abhi koi active giveaway nahi hai.", reply_markup=admin_back_kb())
             return
-        video = data.get("video")
-        await config.replace_one(
-            {"_id": "giveaway"},
-            {
-                "_id": "giveaway",
-                "code": data["code"],
-                "admin_message": m.html_text,
-                "video_url": video,
-                "created_at": now_utc(),
-                "closing": False,
-            },
-            upsert=True,
-        )
-        live_state["v"] += 1
+        txt = (m.text or "").strip()
+        if not txt:
+            await m.answer("⚠️ Text me bhejein.")
+            return
+        upd, refresh = {}, False
+        if field == "code":
+            upd = {"code": txt}
+        elif field == "links":
+            links, bad = parse_links(txt)
+            if not links:
+                await m.answer(LINKS_ERR)
+                return
+            upd, refresh = {"links": links, "video_url": links[0]["url"]}, True
+        elif field == "note":
+            if len(txt) > MAX_NOTE:
+                await m.answer(f"⚠️ Note bahut lamba hai (max {MAX_NOTE} characters).")
+                return
+            upd, refresh = {"note": m.html_text}, True
+        elif field == "time":
+            wa = parse_winner_time(txt)
+            if not wa or wa <= now_utc():
+                await m.answer(TIME_ERR, reply_markup=kb(*time_quick_rows(), [btn("↩️ Wapas", "adm:edit")]))
+                return
+            upd, refresh = {"winner_at": wa, **winner_time_flags(wa)}, True
+        elif field == "msg":
+            upd = {"admin_message": m.html_text}
+        else:
+            await clear_state(ADMIN_ID)
+            return
         await clear_state(ADMIN_ID)
-        n = await entries.count_documents({})
-        post_line = ""
-        if video:  # channel par video-code post
-            pst = await deliver(
-                TASK_CHANNEL_ID,
-                lambda cid: bot.send_message(
-                    cid,
-                    video_post_text(),
-                    reply_markup=kb(
-                        [btn(video_label(video), url=video)],
-                        [btn("🔑 Enter Code", url=f"https://t.me/{BOT_USERNAME}?start=code")],
-                    ),
-                ),
-            )
-            post_line = "\n📣 Channel video post: " + ("✅ ho gayi" if pst == OK else "⚠️ nahi gayi (bot ko channel me admin banayein)")
-        await m.answer(
-            "✅ <b>Giveaway set ho gaya!</b>\n\n"
-            f"🔑 Code: <code>{esc(data['code'])}</code>\n"
-            f"🎥 Video: {esc(video) if video else '— (skip)'}\n"
-            f"🎟 Maujooda entries: <b>{n}</b>{post_line}\n\n"
-            "📩 <b>Admin message preview:</b>\n\n" + m.html_text,
-            reply_markup=admin_back_kb(),
-        )
+        await config.update_one({"_id": "giveaway"}, {"$set": upd})
+        live_state["v"] += 1
+        gw.update(upd)
+        note = "✅ <b>Update ho gaya!</b>"
+        if refresh:
+            note += "\n📣 Channel post: " + await refresh_channel_post(gw)
+        text, markup = await edit_card(gw, note)
+        await m.answer(text, reply_markup=markup)
 
     # ---- Select Winner: step 1 (ID)
     elif name == "admin_win_id":
@@ -1967,6 +2711,10 @@ async def handle_admin_state(m: Message, st: dict) -> None:
         except ValueError:
             await m.answer("⚠️ Sirf number wali Telegram ID bhejein.")
             return
+        lst = list(data.get("list", []))
+        if any(x["id"] == wid for x in lst):
+            await m.answer("⚠️ Ye winner pehle hi chuna ja chuka hai. Dusri ID bhejein:")
+            return
         u = await users.find_one({"_id": wid})
         if not u:
             await m.answer(
@@ -1974,7 +2722,7 @@ async def handle_admin_state(m: Message, st: dict) -> None:
                 "Sahi ID bhejein:"
             )
             return
-        await set_state(ADMIN_ID, "admin_win_code", {"winner_id": wid})
+        await set_state(ADMIN_ID, "admin_win_code", {"winner_id": wid, "list": lst})
         await m.answer(
             f"👤 Winner: <b>{esc(u.get('name'))}</b> (<code>{wid}</code>)\n\n"
             "Step 2/2 — Ab <b>Redeem Code</b> bhejein jo winner ko DM me jayega:",
@@ -1987,33 +2735,12 @@ async def handle_admin_state(m: Message, st: dict) -> None:
             await m.answer("⚠️ Redeem code text me bhejein.")
             return
         code = m.text.strip()
-        wid = int(data["winner_id"])
-        u = await users.find_one({"_id": wid}) or {}
-        entry = await entries.find_one({"_id": wid})
-        n_targets = len(await non_winner_ids(wid))
-        gw = await get_giveaway()
-        await set_state(ADMIN_ID, "admin_win_confirm", {"winner_id": wid, "code": code})
-        entry_line = f"✅ Haan — tickets: {entry.get('tickets', 1)}" if entry else "❌ Nahi"
-        rand_line = "🎲 Random pick se chuna gaya\n" if data.get("random") else ""
-        await m.answer(
-            "🏆 <b>Confirm Winner</b>\n\n"
-            f"👤 {esc(u.get('name'))}  (<code>{wid}</code>)\n"
-            f"🎟 Entry daali thi: {entry_line}\n"
-            f"{rand_line}"
-            f"🎁 Redeem Code: <code>{esc(code)}</code>\n"
-            f"📨 Non-winners ko message jayega: <b>{n_targets}</b>\n"
-            f"🔑 Purana giveaway code delete hoga: {'✅' if gw else '— (set nahi hai)'}\n\n"
-            "Confirm karne par:\n"
-            "1️⃣ Code winner ke DM me jayega\n"
-            "2️⃣ Baaki sabko winner-announcement jayega\n"
-            "3️⃣ Purana code + sabhi entries delete ho jayengi\n"
-            "4️⃣ Channel par winner proof post hoga\n\n"
-            "<b>Ye action undo nahi hota.</b>",
-            reply_markup=kb(
-                [btn("✅ Confirm & Declare", "adm:win_go")],
-                [btn("❌ Cancel", "adm:home")],
-            ),
-        )
+        lst = list(data.get("list", [])) + [
+            {"id": int(data["winner_id"]), "code": code, "random": bool(data.get("random"))}
+        ]
+        await set_state(ADMIN_ID, "admin_win_confirm", {"list": lst})
+        text, markup = await win_confirm_card(lst)
+        await m.answer(text, reply_markup=markup)
 
     # ---- Broadcast: message mil gaya -> optional button
     elif name == "admin_bc_msg":
@@ -2230,10 +2957,10 @@ async def on_message(m: Message):
 # ======================================================================
 #  BACKGROUND JOBS: WINNER + BROADCAST
 # ======================================================================
-async def declare_winner(winner_id: int, redeem_code: str) -> None:
+async def declare_winner(winners_list: list) -> None:
     async with broadcast_lock:
         try:
-            await _declare_winner(winner_id, redeem_code)
+            await _declare_winner(winners_list)
         except Exception:
             logger.exception("declare_winner failed")
             await config.update_one({"_id": "giveaway"}, {"$set": {"closing": False}})
@@ -2243,51 +2970,100 @@ async def declare_winner(winner_id: int, redeem_code: str) -> None:
             )
 
 
-async def _declare_winner(winner_id: int, redeem_code: str) -> None:
-    wu = await users.find_one({"_id": winner_id}) or {}
-    wname = wu.get("name") or "Ek user"
-    wuser = wu.get("username")
-    winner_label = esc(wname) + (f" (@{esc(wuser)})" if wuser else "")
+def _wlabel(x: dict) -> str:
+    return esc(x["name"]) + (f" (@{esc(x['username'])})" if x.get("username") else "")
+
+
+async def _declare_winner(wl: list) -> None:
+    gw = await get_giveaway() or {}
+    paid = list(gw.get("paid_winners") or [])  # pehle ke attempt me jinko code ja chuka hai
+    infos = []
+    for w in wl:
+        wu = await users.find_one({"_id": w["id"]}) or {}
+        infos.append(
+            {
+                "id": w["id"],
+                "name": wu.get("name") or "Ek user",
+                "username": wu.get("username"),
+                "code": w["code"],
+                "random": bool(w.get("random")),
+            }
+        )
 
     # giveaway band karo (naye entries na aayein)
     await config.update_one({"_id": "giveaway"}, {"$set": {"closing": True}})
 
-    # 1) redeem code -> winner ke DM
-    res = await deliver(
-        winner_id,
-        lambda uid: bot.send_message(uid, winner_dm_text(redeem_code), reply_markup=channel_kb()),
-    )
-    if res != OK:
-        await config.update_one({"_id": "giveaway"}, {"$set": {"closing": False}})
-        if res == JUNK:
-            await mark_junk(winner_id)
-        await notify_admin(
-            "❌ <b>Winner ko DM nahi ja paya</b> (user ne bot block kiya ya start nahi kiya).\n"
-            "Kuch bhi delete nahi hua. Dusra winner chunein."
+    # 1) redeem code -> har winner ke DM
+    ok, failed = [], []
+    for i in infos:
+        res = await deliver(
+            i["id"],
+            lambda uid, c=i["code"]: bot.send_message(uid, winner_dm_text(c), reply_markup=channel_kb()),
         )
+        if res == OK:
+            ok.append(i)
+        else:
+            failed.append(i)
+            if res == JUNK:
+                await mark_junk(i["id"])
+    if failed:
+        upd: dict = {"$set": {"closing": False}}
+        if ok:  # jinko code chala gaya unki entry hata do, taaki dobara pick na ho
+            await entries.delete_many({"_id": {"$in": [i["id"] for i in ok]}})
+            upd["$push"] = {
+                "paid_winners": {
+                    "$each": [
+                        {"id": i["id"], "name": i["name"], "username": i.get("username"), "random": i["random"]}
+                        for i in ok
+                    ]
+                }
+            }
+        await config.update_one({"_id": "giveaway"}, upd)
+        msg = "❌ <b>Ye winner(s) ko DM nahi ja paya</b> (bot block kiya ya start nahi kiya):\n"
+        msg += "\n".join(f"• {_wlabel(i)} (<code>{i['id']}</code>)" for i in failed)
+        if ok:
+            msg += (
+                "\n\n✅ In winner(s) ko code mil chuka hai:\n"
+                + "\n".join(f"• {_wlabel(i)}" for i in ok)
+                + "\n\nUnki entry hata di gayi hai. Giveaway wapas khul gaya — "
+                "<b>baaki winner(s)</b> dobara chunke declare karein."
+            )
+        else:
+            msg += "\n\nKuch bhi delete nahi hua. Dusra winner chunein."
+        await notify_admin(msg, admin_back_kb())
         return
 
+    all_w = paid + [
+        {"id": i["id"], "name": i["name"], "username": i.get("username"), "random": i["random"]} for i in infos
+    ]
+    ids = [x["id"] for x in all_w]
+    winner_label = ", ".join(_wlabel(x) for x in all_w)
+    all_random = all(x.get("random") for x in all_w)
+
     # 2) baaki sabko (non-winners) announcement
-    entries_count = await entries.count_documents({})
-    targets = await non_winner_ids(winner_id)
+    entries_count = await entries.count_documents({}) + len(paid)
+    targets = await non_winner_ids(set(ids))
     status = await bot.send_message(ADMIN_ID, f"📨 Non-winners ko message bhej raha hoon… 0/{len(targets)}")
     stats = await run_broadcast(
         targets,
-        lambda uid: bot.send_message(uid, non_winner_text(winner_label), reply_markup=channel_kb()),
+        lambda uid: bot.send_message(uid, non_winner_text(winner_label, len(all_w)), reply_markup=channel_kb()),
         make_progress(status, "📨 Non-winners broadcast"),
     )
 
-    # 3) cleanup: purana code + sabhi entries delete (naye giveaway ke liye reset)
+    # 3) cleanup: giveaway ka poora data (code, links, entries) delete — naye giveaway ke liye reset
     giveaway_no = await winners.count_documents({}) + 1
     declared_at = now_utc()
     await config.delete_one({"_id": "giveaway"})
     deleted = (await entries.delete_many({})).deleted_count
     await users.update_many({}, {"$set": {"wrong_count": 0, "locked_until": None}})
-    await winners.insert_one(
+    first = all_w[0]
+    ins = await winners.insert_one(
         {
-            "winner_id": winner_id,
-            "name": wname,
-            "username": wuser,
+            "winner_id": first["id"],
+            "name": first["name"],
+            "username": first.get("username"),
+            "winners_all": [{"id": x["id"], "name": x["name"], "username": x.get("username")} for x in all_w],
+            "random": all_random,
             "giveaway_no": giveaway_no,
             "declared_at": declared_at,
             "entries_count": entries_count,
@@ -2295,44 +3071,115 @@ async def _declare_winner(winner_id: int, redeem_code: str) -> None:
             "notified": stats,
         }
     )
+    live_state["v"] += 1
+    await close_channel_post(gw)  # purani giveaway post "khatam" ho jati hai
 
     # 4) winner proof -> task channel par
     proof = "— (off)"
     if POST_WINNER_TO_CHANNEL:
-        pres = await deliver(
+        names = ", ".join(esc(mask_name(x["name"])) for x in all_w)
+        single = len(all_w) == 1
+        pres, pmsg = await deliver_result(
             TASK_CHANNEL_ID,
             lambda cid: bot.send_message(
                 cid,
-                f"🏆 <b>Giveaway #{giveaway_no} — Winner Declared!</b>\n\n"
-                f"👤 Winner: <b>{esc(mask_name(wname))}</b>\n"
+                f"🏆 <b>Giveaway #{giveaway_no} — {'Winner' if single else 'Winners'} Declared!</b>\n\n"
+                f"👤 {'Winner' if single else f'Winners ({len(all_w)})'}: <b>{names}</b>\n"
                 f"🎟 Total entries: <b>{entries_count}</b>\n"
-                f"🕒 {fmt_ist(declared_at)}\n\n"
-                "✅ Redeem code winner ke DM me bhej diya gaya hai.\n"
+                f"🕒 {fmt_ist(declared_at)}\n"
+                + ("🎲 Method: Random Pick (tickets ke hisaab se)\n" if all_random else "")
+                + "\n✅ Redeem code winner ke DM me bhej diya gaya hai.\n"
                 f"🤖 Agle giveaway ke liye: https://t.me/{BOT_USERNAME}",
             ),
         )
-        proof = "✅ Post ho gaya" if pres == OK else "⚠️ Post nahi hua (bot ko channel me admin banayein)"
+        if pres == OK and pmsg:
+            await winners.update_one({"_id": ins.inserted_id}, {"$set": {"proof_url": post_link(pmsg.message_id)}})
+            proof = "✅ Post ho gaya"
+        else:
+            proof = "⚠️ Post nahi hua (bot ko channel me admin banayein)"
 
     # 5) reports
     report = (
         "✅ <b>Winner declare ho gaya!</b>\n\n"
-        f"🏆 Winner: {winner_label}  (<code>{winner_id}</code>)\n"
-        f"🎁 Giveaway #: <b>{giveaway_no}</b>\n"
+        + "\n".join(f"🏆 {_wlabel(x)}  (<code>{x['id']}</code>)" for x in all_w)
+        + f"\n🎁 Giveaway #: <b>{giveaway_no}</b>\n"
         f"📨 Notified: <b>{stats['sent']}</b> / {stats['total']}\n"
         f"🚫 Blocked (Junk me gaye): <b>{stats['junk']}</b>\n"
         f"⚠️ Failed: <b>{stats['failed']}</b>\n"
         f"📣 Channel proof post: {proof}\n"
-        f"🧹 Purana code + <b>{deleted}</b> entries delete ho gayi.\n\n"
+        f"🧹 Giveaway ka data + <b>{deleted}</b> entries delete ho gayi.\n\n"
         "Naye giveaway ke liye <b>Add Giveaway Code</b> use karein."
     )
     await notify_admin(report, admin_back_kb())
     await safe_log(
         "🏆 <b>Winner Declared</b>\n\n"
-        f"👤 {winner_label}\n🆔 <code>{winner_id}</code>\n"
-        f"🎁 Giveaway #{giveaway_no}  |  🎟 Entries: {entries_count}\n"
+        + "\n".join(f"👤 {_wlabel(x)}  🆔 <code>{x['id']}</code>" for x in all_w)
+        + f"\n🎁 Giveaway #{giveaway_no}  |  🎟 Entries: {entries_count}\n"
         f"📨 Notified: {stats['sent']}/{stats['total']}  |  🚫 Junk: {stats['junk']}\n"
         f"🕒 {fmt_ist(declared_at)}"
     )
+
+
+# ======================================================================
+#  WINNER TIME WATCHER  (admin ko time par ping + 1 ghante pehle entry walon ko reminder)
+# ======================================================================
+async def remind_entrants(wa: datetime) -> None:
+    async with broadcast_lock:
+        try:
+            ids = [d["_id"] async for d in entries.find({}, {"_id": 1})]
+            if not ids:
+                return
+            text = (
+                "⏰ <b>Winner 1 ghante me chuna jayega!</b>\n\n"
+                f"🎟 Aapki entry confirm hai. Winner: <b>{esc(fmt_when(wa))}</b>\n"
+                "📢 Result aur proof channel par post hoga — bane rahein 👇"
+            )
+            await run_broadcast(ids, lambda uid: bot.send_message(uid, text, reply_markup=channel_kb()))
+        except Exception:
+            logger.exception("remind_entrants failed")
+
+
+async def giveaway_watch_once() -> None:
+    gw = await get_giveaway()
+    if not gw or gw.get("closing") or not gw.get("winner_at"):
+        return
+    wa, now = gw["winner_at"], now_utc()
+    if wa.tzinfo is None:
+        wa = wa.replace(tzinfo=timezone.utc)
+
+    if not gw.get("users_reminded") and now >= wa - timedelta(hours=1):
+        res = await config.update_one(
+            {"_id": "giveaway", "users_reminded": {"$ne": True}}, {"$set": {"users_reminded": True}}
+        )
+        if res.modified_count and now < wa:
+            spawn(remind_entrants(wa))
+
+    if not gw.get("admin_pinged") and now >= wa:
+        res = await config.update_one(
+            {"_id": "giveaway", "admin_pinged": {"$ne": True}}, {"$set": {"admin_pinged": True}}
+        )
+        if res.modified_count:
+            n = await entries.count_documents({})
+            await notify_admin(
+                "⏰ <b>Winner ka time ho gaya!</b>\n\n"
+                f"🔑 Code: <code>{esc(gw['code'])}</code>\n"
+                f"🎟 Entries: <b>{n}</b>\n\n"
+                "Winner chunne ke liye neeche dabayein 👇",
+                kb(
+                    [btn("🎲 Random Pick", "adm:win_rand")],
+                    [btn("🏆 Select Winner (ID se)", "adm:winner")],
+                    [btn("✏️ Edit Giveaway", "adm:edit")],
+                ),
+            )
+
+
+async def giveaway_watch_loop() -> None:
+    while True:
+        await asyncio.sleep(45)
+        try:
+            await giveaway_watch_once()
+        except Exception:
+            logger.exception("giveaway_watch_loop")
 
 
 async def run_admin_broadcast(
@@ -3327,6 +4174,7 @@ async def main() -> None:
     spawn(monitor_loop())
     spawn(rewards_watch_loop())
     spawn(streak_remind_loop())
+    spawn(giveaway_watch_loop())
     spawn(alert_admin("startup", "🔄 <b>Bot start/restart hua</b> ✅\nAgar ye baar-baar aaye to Koyeb logs check karein.", cooldown=120))
 
     try:  # chat ke menu button se website (Mini App) khulegi
