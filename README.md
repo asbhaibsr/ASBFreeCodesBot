@@ -1,4 +1,4 @@
-# 🎁 ASB FreeCodes Bot (v2.1)
+# 🎁 ASB FreeCodes Bot (v3)
 
 Telegram Giveaway Bot + Website + Mini App — **Python · aiogram 3 · MongoDB Atlas · aiohttp**, Koyeb par deploy hone ke liye ready.
 Bot: http://t.me/ASBFreeCodesBot
@@ -48,6 +48,24 @@ GitHub app/web par `static/index.html` banane ke liye "Create new file" me naam 
 | 📢 Promo Broadcast | Koi bhi message + optional link button |
 | 📣 Mini App Notice | Maintenance / offer ka notice Mini App ke upar sabko dikhta hai |
 | 🌐 Website + Mini App | Live giveaway (saare platform links + winner time), winners proof wall, leaderboard, sponsors, FAQ; Telegram ke andar personal dashboard |
+
+## 💰 v3 — Wallet, Invite Code, Withdraw, Weekly Leaderboard
+
+| Feature | Kaise kaam karta hai |
+|---|---|
+| **Refer = ₹0.20** | Dost verify + channel join kare to referrer ke **balance** me ₹0.20 (+ 1 ticket + refer card progress). `REF_REWARD_RS` se badal sakte ho. |
+| **Invite Code** | Har user ka invite code = uski **Telegram ID**. Bot (Refer & Earn → *Invite Code Daalo*) aur Mini App (Profile / Home) dono me daal sakte hain. Pehle channel join check hota hai — join nahi to mana, join karke dobara code daalna hota hai. Reciprocal (A↔B) aur apna code block hai. |
+| **Weekly Leaderboard** | Sunday 00:00 IST → agla Sunday. Top 3 ko **₹15 / ₹10 / ₹5** automatically balance me (sirf jinke us hafte **10+ refers** ho). Result channel par bhi post hota hai. Fraud-flag wale ka prize ruk jata hai (admin ko alert). |
+| **Reward Cards** | Card complete hone par user **Claim Now** dabata hai → paisa seedha profile balance me. |
+| **Withdraw** | Balance ≥ ₹50 par UPI / Bank (A/C + IFSC) / Mobile + **sahi naam**. Request DB me pending save hoti hai, admin ko card jata hai (**Paid / Reject**). Aap paisa khud bhejte ho → *Paid* dabate hi user ko "paise mil gaye?" **Haan / Nahi** buttons jate hain, jawab aapko milta hai. *Reject* par paisa balance me wapas. Admin Panel → **💸 Withdrawals** me saari pending requests. |
+| **Start menu** | Chhote small-caps buttons: *Enter Code* (bada) · *Help* + *Channel Join* · *Refer & Earn* + *About* · *Mini App*. About me @asbhaibsr, channel aur group link. |
+| **New-user log** | Har naye user ka message log channel me (spike me batch ho jata hai, flood nahi). |
+| **Winner result post** | Channel par winner (pura naam, tappable) + participants (jo nahi jeete) side-by-side, quote style. Mini App → Top → Winners me bhi dikhta hai. |
+| **Blocked winner** | Agar winner ne bot block/delete kiya hai to wahi code apne aap kisi aur entrant ko chala jata hai. |
+
+**Naye DB fields/collections:** `users.balance_p / earned_p / withdrawn_p` (paise me), `users.wkc.<hafte ki Sunday date>` (weekly refer count), `withdrawals` collection. Purane users ka data safe hai (fields apne aap bante hain).
+
+**Update kaise karein:** purani files (`bot.py`, `site_app.py`, `static/index.html`, `.env.example`, `README.md`) replace karo, naye env variables (upar `.env.example` me) optional hain — default already set hain. Redeploy karo.
 
 ## 🌐 Website
 Aapki Koyeb public URL ek proper website hai. Bot ke menu me **🎁 DAILY BONUS & REWARDS** button isi ko Telegram ke andar kholta hai (kuch install nahi karna). Mini App me user ka apna dashboard (tickets, streak, referrals, rank, referral link) dikhta hai — ye Telegram ke signed `initData` se verify hota hai, to koi doosre ka data nahi dekh sakta. Public page par sirf masked naam (`Ra***`) dikhte hain.
