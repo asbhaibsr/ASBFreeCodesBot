@@ -9,7 +9,9 @@ Routes
   POST /api/claim           -> drop claim / lucky join
   POST /api/daily           -> daily bonus
   POST /api/remind          -> drop reminder ON
-  POST /api/reward/redeem   -> reward card redeem request
+  POST /api/reward/redeem   -> reward card CLAIM (paisa seedha profile balance me)
+  POST /api/invite          -> invite code lagao (referrer ki Telegram ID)
+  POST /api/withdraw        -> withdraw request (UPI / bank / mobile)
   POST /api/settings        -> user settings (streak reminder)
 
 Har POST me Telegram ka signed `initData` chahiye — bina Telegram ke koi data nahi dekh sakta.
@@ -45,6 +47,30 @@ def short_name(name) -> str:
     """'Ravi Kumar Singh' -> 'Ravi' (public lists me sirf pehla naam)."""
     parts = str(name or "").strip().split()
     return (parts[0] if parts else "User")[:14]
+
+
+def disp_name(name, n: int = 26) -> str:
+    """Poora naam (channel / mini app results me) — bahut lamba ho to kaat do."""
+    s = " ".join(str(name or "").split()) or "User"
+    return s if len(s) <= n else s[: n - 1] + "…"
+
+
+def week_start_ist(dt=None):
+    """Hafta Sunday (IST) se shuru hota hai. Return: us Sunday ki date."""
+    base = dt or datetime.now(timezone.utc)
+    d = base.astimezone(IST).date()
+    return d - timedelta(days=(d.weekday() + 1) % 7)  # Mon=0 .. Sun=6  ->  Sunday par 0
+
+
+def week_key(dt=None) -> str:
+    """Hafte ki key, jaise '2026-11-08' (us Sunday ki date)."""
+    return week_start_ist(dt).isoformat()
+
+
+def week_end_dt(dt=None):
+    """Is hafte ka khatam hone ka time = agla Sunday 00:00 IST."""
+    start = week_start_ist(dt) + timedelta(days=7)
+    return datetime(start.year, start.month, start.day, tzinfo=IST)
 
 
 def iso(dt) -> str:
@@ -227,7 +253,14 @@ async def build_shared(db: dict, ctx: dict) -> dict:
         "entries_total": await entries.count_documents({}),
         "entries": [],
         "winners": [],
-        "board": {"refs": [], "streaks": []},
+        "board": {"refs": [], "streaks": [], "weekly": []},
+        "week": {
+            "key": week_key(),
+            "ends_at": iso(week_end_dt()),
+            "prizes": list(ctx["public"].get("lb_prizes", [])),
+            "min_refs": int(ctx["public"].get("lb_min_refs", 10)),
+        },
+        "results": [],
         "sponsors": [],
         "drops": {"current": None, "history": []},
     }
@@ -246,6 +279,14 @@ async def build_shared(db: dict, ctx: dict) -> dict:
             {"uid": w.get("winner_id"), "uids": uids, "name": names, "uname": w.get("username"),
              "at": iso(w.get("declared_at")), "no": w.get("giveaway_no"), "entries": w.get("entries_count", 0)}
         )
+    wk = shared["week"]["key"]
+    async for u in users.find({f"wkc.{wk}": {"$gt": 0}, "banned": {"$ne": True}}).sort(
+        [(f"wkc.{wk}", -1), (f"wkt.{wk}", 1)]
+    ).limit(20):
+        shared["board"]["weekly"].append(
+            {"uid": u["_id"], "name": disp_name(u.get("name"), 22), "uname": u.get("username"),
+             "count": int((u.get("wkc") or {}).get(wk, 0))}
+        )
     async for u in users.find({"ref_count": {"$gt": 0}}).sort("ref_count", -1).limit(20):
         shared["board"]["refs"].append(
             {"uid": u["_id"], "name": short_name(u.get("name")), "uname": u.get("username"), "count": u.get("ref_count", 0)}
@@ -254,6 +295,25 @@ async def build_shared(db: dict, ctx: dict) -> dict:
         shared["board"]["streaks"].append(
             {"uid": u["_id"], "name": short_name(u.get("name")), "uname": u.get("username"), "count": u.get("best_streak", 0)}
         )
+    names_cap = int(ctx["public"].get("result_names", 200))
+    ridx = 0
+    async for w in winners.find({}).sort("declared_at", -1).limit(3):
+        allw = w.get("winners_all") or []
+        losers = w.get("losers") or []
+        shared["results"].append(
+            {
+                "no": w.get("giveaway_no"),
+                "at": iso(w.get("declared_at")),
+                "total": int(w.get("entries_count", 0)),
+                "winners": [{"uid": x.get("id"), "name": disp_name(x.get("name")), "uname": x.get("username")} for x in allw],
+                "losers": [
+                    {"uid": x.get("id"), "name": disp_name(x.get("name")), "uname": x.get("username")}
+                    for x in losers[:names_cap]
+                ] if ridx < 2 else [],
+                "losers_total": int(w.get("losers_total", max(0, int(w.get("entries_count", 0)) - len(allw)))),
+            }
+        )
+        ridx += 1
     async for s in sponsors.find({"active": True}):
         shared["sponsors"].append({"title": s.get("title", "Sponsor"), "link": s.get("link", "")})
 
@@ -289,8 +349,17 @@ def personalize(sh: dict, uid: int) -> dict:
                      "me": uid in w["uids"]} for w in sh["winners"]],
         "board": {
             k: [{"name": x["name"], "uname": x["uname"], "count": x["count"], "me": x["uid"] == uid} for x in sh["board"][k]]
-            for k in ("refs", "streaks")
+            for k in ("refs", "streaks", "weekly")
         },
+        "week": sh["week"],
+        "results": [
+            {
+                "no": r["no"], "at": r["at"], "total": r["total"], "losers_total": r["losers_total"],
+                "winners": [{"name": x["name"], "uname": x["uname"], "me": x["uid"] == uid} for x in r["winners"]],
+                "losers": [{"name": x["name"], "uname": x["uname"], "me": x["uid"] == uid} for x in r["losers"]],
+            }
+            for r in sh["results"]
+        ],
         "drops": {
             "current": drop_public(cur, uid) if cur else None,
             "history": [drop_public(h, uid) for h in sh["drops"]["history"]],
@@ -304,7 +373,7 @@ async def build_me(db: dict, ctx: dict, uid: int, tg_user: dict, current_no) -> 
     u = await users.find_one({"_id": uid})
     if not u:
         return {"registered": False, "name": tg_user.get("first_name", ""), "ref_link": ref_link,
-                "my_claims": [], "rewards": []}
+                "invite_code": str(uid), "my_claims": [], "rewards": [], "withdrawals": []}
 
     entry = await entries.find_one({"_id": uid})
     refs = int(u.get("ref_count", 0))
@@ -326,8 +395,16 @@ async def build_me(db: dict, ctx: dict, uid: int, tg_user: dict, current_no) -> 
             "id": r["_id"], "track": r.get("track"), "cycle": r.get("cycle"), "target": r.get("target"),
             "amount": r.get("amount"), "status": r.get("status"), "earned_at": iso(r.get("earned_at")),
             "requested_at": iso(r.get("requested_at")), "deadline": iso(r.get("deadline")),
-            "sent_at": iso(r.get("sent_at")),
+            "sent_at": iso(r.get("sent_at")), "claimed_at": iso(r.get("claimed_at")),
         })
+    wk = week_key()
+    week_refs = int((u.get("wkc") or {}).get(wk, 0))
+    wds = []
+    if db.get("withdrawals") is not None:
+        async for w in db["withdrawals"].find({"uid": uid}).sort("created_at", -1).limit(6):
+            wds.append({"id": w["_id"], "amount_p": int(w.get("amount_p", 0)), "method": w.get("method"),
+                        "status": w.get("status"), "user_confirm": w.get("user_confirm"),
+                        "at": iso(w.get("created_at"))})
     return {
         "registered": True,
         "name": u.get("name") or tg_user.get("first_name", ""),
@@ -339,6 +416,14 @@ async def build_me(db: dict, ctx: dict, uid: int, tg_user: dict, current_no) -> 
         "ref_cycle": int(u.get("ref_cycle", 1)),
         "ref_cycle_count": int(u.get("ref_cycle_count", 0)),
         "rank_refs": (await users.count_documents({"ref_count": {"$gt": refs}}) + 1) if refs > 0 else None,
+        "week_refs": week_refs,
+        "rank_week": (await users.count_documents({f"wkc.{wk}": {"$gt": week_refs}}) + 1) if week_refs > 0 else None,
+        "balance_p": int(u.get("balance_p", 0)),
+        "earned_p": int(u.get("earned_p", 0)),
+        "withdrawn_p": int(u.get("withdrawn_p", 0)),
+        "invite_code": str(uid),
+        "has_referrer": bool(u.get("ref_by")),
+        "withdrawals": wds,
         "rank_streak": (await users.count_documents({"best_streak": {"$gt": best}}) + 1) if best > 0 else None,
         "streak": int(u.get("streak", 0)),
         "streak_cycle": int(u.get("streak_cycle", 1)),
@@ -515,6 +600,20 @@ def create_app(ctx: dict) -> web.Application:
     async def api_redeem(request):
         return await action(request, "redeem", lambda uid, b: (uid, str(b.get("reward", ""))[:80]) if b.get("reward") else None)
 
+    async def api_invite(request):
+        return await action(
+            request, "invite", lambda uid, b: (uid, str(b.get("code", ""))[:24]) if b.get("code") else None
+        )
+
+    async def api_withdraw(request):
+        def build(uid, b):
+            method = str(b.get("method", ""))
+            if method not in ("upi", "bank", "mobile"):
+                return None
+            return (uid, method, str(b.get("detail", ""))[:90], str(b.get("name", ""))[:60])
+
+        return await action(request, "withdraw", build)
+
     async def api_settings(request):
         return await action(request, "settings", lambda uid, b: (uid, bool(b.get("streak_remind"))))
 
@@ -531,6 +630,8 @@ def create_app(ctx: dict) -> web.Application:
     app.router.add_post("/api/daily", api_daily)
     app.router.add_post("/api/remind", api_remind)
     app.router.add_post("/api/reward/redeem", api_redeem)
+    app.router.add_post("/api/invite", api_invite)
+    app.router.add_post("/api/withdraw", api_withdraw)
     app.router.add_post("/api/settings", api_settings)
     return app
 
