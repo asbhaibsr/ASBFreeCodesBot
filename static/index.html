@@ -137,6 +137,15 @@ nav.tabs button.on i{transform:translateY(-2px) scale(1.12)}
 nav.tabs button.hot i{filter:drop-shadow(0 0 8px var(--gold))}
 nav.tabs button .dot{position:absolute;top:6px;right:calc(50% - 20px);width:10px;height:10px;border-radius:50%;background:var(--red);box-shadow:0 0 0 3px rgba(255,69,69,.25);animation:pop 1.2s infinite}
 
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.nchip{padding:5px 10px;border-radius:999px;font-size:.76rem;font-weight:600;background:var(--surface2);border:1px solid var(--line);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nchip.win{background:linear-gradient(135deg,rgba(255,200,61,.3),rgba(255,77,141,.22));border-color:var(--gold);font-weight:800}
+.nchip.me{border-color:var(--cy);color:var(--cy)}
+.lab{font-size:.78rem;font-weight:800;margin-top:12px;color:var(--muted)}
+details.more summary{cursor:pointer;font-size:.8rem;font-weight:700;color:var(--link);margin-top:10px;list-style:none}
+.inp{width:100%;padding:12px 14px;border-radius:12px;border:1px solid var(--line);background:var(--surface2);color:var(--text);font-size:.95rem;margin-top:8px;user-select:text;-webkit-user-select:text;outline:none}
+.sheet .seg{margin:12px 0 4px}
+.sheet .err{color:var(--bad);font-size:.8rem;margin-top:8px;min-height:1em}
 .sheet-bg{position:fixed;inset:0;z-index:60;background:rgba(0,0,0,.55);display:flex;align-items:flex-end;justify-content:center;animation:fadeBg .25s}
 @keyframes fadeBg{from{opacity:0}}
 .sheet{width:min(640px,100%);background:var(--bg);border:1px solid var(--line);border-radius:26px 26px 0 0;padding:24px 20px calc(var(--bot) + 24px);animation:up .3s;text-align:center}
@@ -260,7 +269,25 @@ var EN = {
 "🔔 Reminder set! Drop se pehle DM aayega":"🔔 Reminder set! You'll get a DM before the drop","Reminder pehle se ON hai":"Reminder already ON","Pehle bot start karein":"Start the bot first",
 "✅ Aaj ka bonus pehle hi le liya":"✅ Today's bonus already claimed",
 "✅ Aap pehle hi claim kar chuke ho":"✅ You already claimed","Session expire — app dobara kholein":"Session expired — reopen the app",
-"🚫 Aapka account restricted hai. Support se contact karein.":"🚫 Your account is restricted. Contact support."
+"🚫 Aapka account restricted hai. Support se contact karein.":"🚫 Your account is restricted. Contact support.",
+"Reward cards poore karo — paisa seedha profile balance me add hota hai. Claim Now dabao, bas!":"Complete reward cards — the money is added straight to your profile balance. Just tap Claim Now!",
+"💰 Claim Now":"💰 Claim Now","✅ Claimed":"✅ Claimed","Ye paisa seedha aapke profile balance me add ho jayega.":"This money will be added straight to your profile balance.",
+"✅ Paisa balance me add ho gaya!":"✅ Money added to your balance!","🏅 Weekly":"🏅 Weekly","🏅 Weekly Leaderboard":"🏅 Weekly Leaderboard","Top 3 ko prize":"Top 3 prize",
+"Hafta khatam hone me:":"Week ends in:","📍 Is hafte aapke refers":"📍 Your refers this week","Is hafte abhi kisi ke refer nahi — pehle aap bano champion! 🚀":"No refers this week yet — be the champion! 🚀",
+"🎁 Giveaway":"🎁 Giveaway","participants":"participants","🏆 Winner":"🏆 Winner","😔 Nahi jeete":"😔 Did not win","aur":"more","📜 Saare winners":"📜 All winners",
+"💼 Mera Wallet":"💼 My Wallet","Balance":"Balance","Kamaya":"Earned","Nikala":"Withdrawn","✅ Aap withdraw kar sakte ho":"✅ You can withdraw now","Withdraw ke liye kam se kam":"Minimum to withdraw","chahiye":"needed",
+"💸 Withdraw":"💸 Withdraw","⏳ Pending":"⏳ Pending","✅ Bhej diya":"✅ Sent","✅ Mil gaya":"✅ Received","❌ Reject":"❌ Rejected","⚠️ Dispute":"⚠️ Disputed",
+"🎟 Invite Code":"🎟 Invite Code","Ye aapka Invite Code hai. Dost ye code bot / app me daale to aapko ₹0.20 + 1 ticket milega.":"This is your Invite Code. When a friend enters it in the bot / app you get ₹0.20 + 1 ticket.",
+"📋 Copy Code":"📋 Copy Code","🎟 Invite Code Daalo":"🎟 Enter Invite Code","Jis dost ne aapko bulaya uska Invite Code daalo":"Enter the Invite Code of the friend who invited you","✅ Lagao":"✅ Apply",
+"UPI ID":"UPI ID","Bank":"Bank","Mobile":"Mobile","Account no + IFSC":"Account no + IFSC","Mobile number":"Mobile number","Account/UPI par jo sahi naam hai":"Name exactly as on the account / UPI","✅ Request Bhejo":"✅ Send Request",
+"✅ Withdraw request bhej di! Paisa bhejte hi message aayega.":"✅ Withdraw request sent! You'll get a message once it's paid.","⏳ Aapki request pehle se pending hai":"⏳ You already have a pending request",
+"Balance kam hai":"Balance too low","Detail sahi nahi hai, dobara check karein":"Details look wrong, please check","Naam sahi daalo (sirf letters)":"Enter a valid name (letters only)",
+"🎉 Invite code lag gaya!":"🎉 Invite code applied!","📢 Pehle channel join karo, fir dobara code daalo":"📢 Join the channel first, then enter the code again","🛡 Bot me Verify karo — phir reward milega":"🛡 Verify in the bot — then the reward is credited",
+"Aapka invite code pehle hi lag chuka hai":"You already applied an invite code","😅 Apna hi code nahi chalega":"😅 You can't use your own code","❌ Ye invite code nahi mila":"❌ Invite code not found",
+"⚠️ Is dost ne pehle hi aapka code lagaya hai":"⚠️ This friend already used your code","⏳ Abhi check nahi ho pa raha, baad me try karo":"⏳ Can't verify right now, try later","📢 Channel Join":"📢 Join Channel",
+"Har dost jo aapke link ya invite code se aayega, verify karega aur channel join karega = ₹0.20 + 1 ticket + refer card progress.":"Every friend who joins via your link or invite code, verifies and joins the channel = ₹0.20 + 1 ticket + refer card progress.",
+"💰 Wallet":"💰 Wallet","Profile kholo":"Open Profile",
+"Claim Now dabao, paisa seedha balance me add ho jayega.":"Tap Claim Now and the money goes straight to your balance."
 };
 function t(s){ return (S.lang==="en" && EN[s]) ? EN[s] : s; }
 function loadLang(){ try{ var l=localStorage.getItem("asb_lang"); if(l==="en"||l==="hi") S.lang=l; }catch(e){} }
@@ -479,6 +506,10 @@ function renderHome(d){
     var bar2=el("div","bar mt"); var bi2=el("i"); bi2.style.width=Math.min(100,Math.round(rn.val/rn.target*100))+"%"; bar2.appendChild(bi2); rc.appendChild(bar2);
     rc.appendChild(el("p","mt","🎯 "+rn.val+"/"+rn.target+" refer → ₹"+rn.amount+" card")); var rb=el("div","mt"); rb.appendChild(B(t("🎯 Reward Cards"),"vio",function(){go("rewards");})); rc.appendChild(rb); b.appendChild(rc);}
 
+  var wc=card(); var wt=el("div","flex sp"); wt.appendChild(el("h3",null,t("💰 Wallet"))); wt.appendChild(el("span","pill ok",money(me.balance_p))); wc.appendChild(wt);
+  wc.appendChild(el("p",null,"👥 Refer = ₹0.20 · 🏅 Weekly top 3 = "+((d.week&&d.week.prizes)||[]).map(function(p){return "₹"+p;}).join(" / ")));
+  var wr=el("div","row2 mt"); if(!me.has_referrer) wr.appendChild(B(t("🎟 Invite Code Daalo"),"vio",showInvite)); wr.appendChild(B(t("Profile kholo"),"",function(){go("me");})); wc.appendChild(wr); b.appendChild(wc);
+
   var tr=el("div","row3"); [[t("Users"),d.totals.users],[t("Winners"),d.totals.winners],[t("Referrals"),me.refs||0]].forEach(function(x){var s=el("div","stat"); s.appendChild(el("b",null,num(x[1]))); s.appendChild(el("span",null,x[0])); tr.appendChild(s);}); b.appendChild(tr);
 }
 
@@ -575,8 +606,9 @@ function rcCard(d,track,target,amount,val,cyc,isNext){
   return c;
 }
 function rcState(c,r,track){
-  if(r.status==="earned"){ c.classList.add("ready"); c.appendChild(B(t("🎁 Redeem Now"),"gold",function(){confirmRedeem(r,track);})); }
+  if(r.status==="earned"){ c.classList.add("ready"); c.appendChild(B(t("💰 Claim Now"),"gold",function(){confirmRedeem(r,track);})); }
   else if(r.status==="requested"){ c.classList.add("ready"); c.appendChild(el("span","tag",t("⏳ Admin ko bhej diya"))); var tm=el("span","tag mut"); tm.setAttribute("data-cdr",r.deadline); c.appendChild(tm); }
+  else if(r.status==="claimed"){ c.classList.add("done"); c.appendChild(el("span","tag",t("✅ Claimed"))); }
   else if(r.status==="sent"){ c.classList.add("done"); c.appendChild(el("span","tag",t("✅ Redeemed"))); }
   else { c.classList.add("done"); c.appendChild(el("span","tag",t("❌ Reject"))); }
   return c;
@@ -584,7 +616,7 @@ function rcState(c,r,track){
 function renderRewards(d){
   var b=$("#t-rewards"); b.textContent=""; var me=d.me;
   var h=el("div","h2"); h.appendChild(el("span",null,t("🎯 Reward Cards"))); b.appendChild(h);
-  var intro=card(); intro.appendChild(el("p",null,t("Streak ya refer ke cards poore karo — ₹ redeem code pao. Redeem Now dabate hi admin ko request jaati hai, 24 ghante me code DM me aata hai."))); b.appendChild(intro);
+  var intro=card(); intro.appendChild(el("p",null,t("Reward cards poore karo — paisa seedha profile balance me add hota hai. Claim Now dabao, bas!"))); b.appendChild(intro);
   [["streak",t("🔥 Streak Cards"),me.streak,me.streak_cycle],["refer",t("👥 Refer Cards"),me.ref_cycle_count,me.ref_cycle]].forEach(function(T){
     var track=T[0], cards=d.reward_cfg[track]||[], val=T[2]||0, cyc=T[3]||1;
     var hd=el("div","h2"); hd.appendChild(el("span",null,T[1])); hd.appendChild(el("small",null,t("Cycle")+" #"+cyc+" · "+t("Abhi")+" "+val)); b.appendChild(hd);
@@ -599,11 +631,11 @@ function renderRewards(d){
 function confirmRedeem(r,track){
   var bg=el("div","sheet-bg"); var sh=el("div","sheet");
   sh.appendChild(el("div",null,"🎁")).style.fontSize="3rem";
-  sh.appendChild(el("h3",null,"₹"+r.amount+" "+t("Confirm karein?"))); sh.appendChild(el("p","mut",t("Redeem Code request admin ko jayegi. 24 ghante ke andar code aapke DM me aayega.")));
+  sh.appendChild(el("h3",null,"₹"+r.amount+" "+t("Confirm karein?"))); sh.appendChild(el("p","mut",t("Ye paisa seedha aapke profile balance me add ho jayega.")));
   var rw=el("div","row2 mt");
-  rw.appendChild(B(t("Redeem Now"),"gold",function(btn){btn.disabled=true;
+  rw.appendChild(B(t("💰 Claim Now"),"gold",function(btn){btn.disabled=true;
     api("/api/reward/redeem",{reward:r.id}).then(function(x){bg.remove();
-      if(x.status==="ok"){toast(t("✅ Redeem request admin ko bhej di!"));notify("success");confetti();}
+      if(x.status==="ok"){toast(t("✅ Paisa balance me add ho gaya!")+" +₹"+(x.amount||r.amount));notify("success");confetti();}
       else if(x.status==="already") toast(t("Ye card pehle hi use ho chuka hai"));
       else if(x.status==="banned") toast(t("🚫 Account restricted hai"));
       else toast(t("Kuch gadbad hui, dobara try karein"));
@@ -612,13 +644,147 @@ function confirmRedeem(r,track){
   bg.appendChild(sh); bg.addEventListener("click",function(e){if(e.target===bg)bg.remove();}); document.body.appendChild(bg);
 }
 
+
+/* ---- money / weekly / results / wallet / invite / withdraw */
+function money(p){p=+p||0; return "₹"+(p%100===0?String(p/100):(p/100).toFixed(2));}
+function chipName(n,cls){
+  var s=el("span","nchip"+(cls?" "+cls:"")+(n.me?" me":""));
+  if(n.uname&&/^[A-Za-z0-9_]{3,32}$/.test(n.uname)){
+    var a=el("a","nlink",n.name); a.href="https://t.me/"+n.uname;
+    a.addEventListener("click",function(e){e.preventDefault();e.stopPropagation();haptic();openLink(a.href);}); s.appendChild(a);
+  } else s.textContent=n.name;
+  return s;
+}
+function renderResults(b,d){
+  (d.results||[]).forEach(function(r){
+    var c=card(); var hd=el("div","flex sp");
+    hd.appendChild(el("h3",null,t("🎁 Giveaway")+" #"+(r.no||"?")));
+    hd.appendChild(el("span","pill ok",num(r.total)+" "+t("participants"))); c.appendChild(hd);
+    c.appendChild(el("div","lab",t("🏆 Winner")));
+    var wc=el("div","chips"); (r.winners||[]).forEach(function(w){wc.appendChild(chipName(w,"win"));}); c.appendChild(wc);
+    if(r.losers_total>0){
+      c.appendChild(el("div","lab",t("😔 Nahi jeete")+" ("+num(r.losers_total)+")"));
+      if(r.losers&&r.losers.length){
+        var dt=el("details","more"); dt.open=r.losers.length<=12; dt.appendChild(el("summary",null,"👥 "+r.losers.length+" "+t("participants")));
+        var lc=el("div","chips"); r.losers.forEach(function(x){lc.appendChild(chipName(x));});
+        var rest=r.losers_total-r.losers.length; if(rest>0) lc.appendChild(el("span","nchip","+"+num(rest)+" "+t("aur")));
+        dt.appendChild(lc); c.appendChild(dt);
+      }
+    }
+    b.appendChild(c);
+  });
+}
+function renderWeekly(b,d){
+  var wk=d.week||{prizes:[],min_refs:10}, me=d.me;
+  var c=card("hero"); c.appendChild(el("h3",null,t("🏅 Weekly Leaderboard")));
+  c.appendChild(el("p",null,t("Top 3 ko prize")+": "+(wk.prizes||[]).map(function(p){return "₹"+p;}).join(" / ")+" · "+wk.min_refs+"+ refers"));
+  var f=el("div","mt flex sp"); f.appendChild(el("span","mut",t("Hafta khatam hone me:"))); f.appendChild(cdInline(wk.ends_at)); c.appendChild(f);
+  c.appendChild(el("p","mt",t("📍 Is hafte aapke refers")+": "+(me.week_refs||0)+(me.rank_week?" · #"+me.rank_week:"")));
+  b.appendChild(c);
+  var rows=d.board.weekly||[];
+  if(!rows.length){b.appendChild(empty(t("Is hafte abhi kisi ke refer nahi — pehle aap bano champion! 🚀")));return;}
+  var medals=["🥇","🥈","🥉"];
+  rows.forEach(function(r,i){
+    var it=el("div","item"+(r.me?" me":"")); it.appendChild(el("span","rk",i<3?medals[i]:String(i+1)));
+    it.appendChild(avatar(r.name,38)); var nm=el("div","nm"); nm.appendChild(nameNode(r.name,r.uname,r.me)); it.appendChild(nm);
+    var prize=(i<(wk.prizes||[]).length&&r.count>=wk.min_refs)?" · ₹"+wk.prizes[i]:"";
+    it.appendChild(el("span","chip",r.count+" refers"+prize)); b.appendChild(it);
+  });
+}
+function sheet(build){
+  var bg=el("div","sheet-bg"); var sh=el("div","sheet"); build(sh,function(){bg.remove();});
+  bg.appendChild(sh); bg.addEventListener("click",function(e){if(e.target===bg)bg.remove();}); document.body.appendChild(bg); return bg;
+}
+function showInvite(){
+  sheet(function(sh,close){
+    sh.appendChild(el("div",null,"🎟")).style.fontSize="3rem";
+    sh.appendChild(el("h3",null,t("🎟 Invite Code Daalo")));
+    sh.appendChild(el("p","mut",t("Jis dost ne aapko bulaya uska Invite Code daalo")));
+    var inp=el("input","inp"); inp.type="text"; inp.inputMode="numeric"; inp.maxLength=15; inp.placeholder="7315805581"; sh.appendChild(inp);
+    var err=el("div","err"); sh.appendChild(err);
+    var jb=null;
+    var row=el("div","row2 mt");
+    row.appendChild(B(t("✅ Lagao"),"gold",function(btn){
+      var code=inp.value.replace(/\D/g,""); if(!code){err.textContent=t("❌ Ye invite code nahi mila");return;}
+      btn.disabled=true; err.textContent="";
+      api("/api/invite",{code:code}).then(function(x){
+        btn.disabled=false; var m={
+          need_join:"📢 Pehle channel join karo, fir dobara code daalo", need_verify:"🛡 Bot me Verify karo — phir reward milega",
+          already:"Aapka invite code pehle hi lag chuka hai", self:"😅 Apna hi code nahi chalega", not_found:"❌ Ye invite code nahi mila",
+          reciprocal:"⚠️ Is dost ne pehle hi aapka code lagaya hai", check_failed:"⏳ Abhi check nahi ho pa raha, baad me try karo",
+          banned:"🚫 Account restricted hai", invalid:"❌ Ye invite code nahi mila", unregistered:"Pehle bot start karein"};
+        if(x.status==="ok"){notify("success");confetti();toast(t("🎉 Invite code lag gaya!"));close();load();}
+        else if(x.status==="need_verify"){toast(t(m.need_verify));close();load();}
+        else { err.textContent=t(m[x.status]||"Kuch gadbad hui, dobara try karein");
+          if(x.status==="need_join"&&!jb){jb=B(t("📢 Channel Join"),"vio",function(){openLink(cfg.channel_link);}); jb.style.marginTop="10px"; sh.insertBefore(jb,row);} }
+      }).catch(function(){btn.disabled=false;err.textContent=t("Network error");});
+    }));
+    row.appendChild(B(t("Close"),"",close)); sh.appendChild(row);
+  });
+}
+function showWithdraw(me){
+  var method="upi", min=cfg.min_withdraw_p||5000;
+  sheet(function(sh,close){
+    sh.appendChild(el("div",null,"💸")).style.fontSize="3rem";
+    sh.appendChild(el("h3",null,t("💸 Withdraw")+" "+money(me.balance_p)));
+    var seg=el("div","seg"); var info=el("p","mut"); var inp=el("input","inp"); var nm=el("input","inp"); var err=el("div","err");
+    var defs={upi:["UPI ID","name@okhdfcbank","text"],bank:["Bank","123456789012 SBIN0001234","text"],mobile:["Mobile","9876543210","tel"]};
+    function draw(){
+      seg.textContent=""; Object.keys(defs).forEach(function(k){var bt=el("button",method===k?"on":"",t(defs[k][0])); bt.addEventListener("click",function(){method=k;haptic();draw();}); seg.appendChild(bt);});
+      info.textContent=k2(method); inp.placeholder=defs[method][1]; inp.type="text"; inp.inputMode=defs[method][2]==="tel"?"tel":"text";
+    }
+    function k2(m){return m==="bank"?t("Account no + IFSC"):m==="mobile"?t("Mobile number"):t("UPI ID");}
+    nm.placeholder=t("Account/UPI par jo sahi naam hai"); nm.maxLength=60; inp.maxLength=90;
+    sh.appendChild(seg); sh.appendChild(info); sh.appendChild(inp); sh.appendChild(nm); sh.appendChild(err); draw();
+    var row=el("div","row2 mt");
+    row.appendChild(B(t("✅ Request Bhejo"),"gold",function(btn){
+      btn.disabled=true; err.textContent="";
+      api("/api/withdraw",{method:method,detail:inp.value.trim(),name:nm.value.trim()}).then(function(x){
+        btn.disabled=false;
+        if(x.status==="ok"){notify("success");confetti();toast(t("✅ Withdraw request bhej di! Paisa bhejte hi message aayega."));close();load();}
+        else if(x.status==="has_pending") err.textContent=t("⏳ Aapki request pehle se pending hai");
+        else if(x.status==="low") err.textContent=t("Balance kam hai")+" ("+money(x.balance_p)+")";
+        else if(x.status==="invalid") err.textContent=x.field==="name"?t("Naam sahi daalo (sirf letters)"):t("Detail sahi nahi hai, dobara check karein");
+        else if(x.status==="banned") err.textContent=t("🚫 Account restricted hai");
+        else err.textContent=t("Kuch gadbad hui, dobara try karein");
+      }).catch(function(){btn.disabled=false;err.textContent=t("Network error");});
+    }));
+    row.appendChild(B(t("Close"),"",close)); sh.appendChild(row);
+  });
+}
+function walletCard(me){
+  var min=cfg.min_withdraw_p||5000;
+  var c=card("hero"); c.appendChild(el("h3",null,t("💼 Mera Wallet")));
+  var r=el("div","row3 mt"); [[t("Balance"),money(me.balance_p)],[t("Kamaya"),money(me.earned_p)],[t("Nikala"),money(me.withdrawn_p)]].forEach(function(x){
+    var s=el("div","stat"); s.appendChild(el("b",null,x[1])); s.appendChild(el("span",null,x[0])); r.appendChild(s);}); c.appendChild(r);
+  var pend=(me.withdrawals||[]).some(function(w){return w.status==="pending";});
+  c.appendChild(el("p","mt",me.balance_p>=min?t("✅ Aap withdraw kar sakte ho"):t("Withdraw ke liye kam se kam")+" "+money(min)+" "+t("chahiye")));
+  var wb=B(t("💸 Withdraw"),"gold",function(){showWithdraw(me);}); wb.style.marginTop="10px"; if(me.balance_p<min||pend||me.banned) wb.disabled=true; c.appendChild(wb);
+  var names={pending:"⏳ Pending",paid:"✅ Bhej diya",confirmed:"✅ Mil gaya",rejected:"❌ Reject",disputed:"⚠️ Dispute"};
+  (me.withdrawals||[]).forEach(function(w){var it=el("div","item"); it.style.marginTop="8px"; var n=el("div","nm"); n.appendChild(el("b",null,money(w.amount_p))); n.appendChild(el("small",null,ago(w.at))); it.appendChild(n); it.appendChild(el("span","chip",t(names[w.status]||w.status))); c.appendChild(it);});
+  return c;
+}
+function inviteCard(me){
+  var c=card(); c.appendChild(el("h3",null,t("🎟 Invite Code")));
+  c.appendChild(el("p",null,t("Ye aapka Invite Code hai. Dost ye code bot / app me daale to aapko ₹0.20 + 1 ticket milega.")));
+  var cd=el("div","code"); cd.appendChild(el("code",null,me.invite_code||"")); c.appendChild(cd);
+  var row=el("div","row2 mt"); row.appendChild(B(t("📋 Copy Code"),"",function(){copy(me.invite_code,t("✅ Code copy ho gaya"));}));
+  row.appendChild(B(t("📤 Share"),"gold",function(){openLink("https://t.me/share/url?url="+encodeURIComponent(me.ref_link)+"&text="+encodeURIComponent("🎁 Free redeem codes jeeto! Mera Invite Code: "+me.invite_code+" — ya ye link use karo:"));}));
+  c.appendChild(row);
+  if(!me.has_referrer){var ib=B(t("🎟 Invite Code Daalo"),"vio",showInvite); ib.style.marginTop="10px"; c.appendChild(ib);}
+  return c;
+}
+
 /* ---- Top (winners + leaderboards) */
 function renderTop(d){
   var b=$("#t-top"); b.textContent="";
   var h=el("div","h2"); h.appendChild(el("span",null,"🏆 Top")); b.appendChild(h);
-  var seg=el("div","seg"); [["winners",t("🏆 Winners")],["refs",t("👥 Referrers")],["streaks",t("🔥 Streaks")]].forEach(function(x){var bt=el("button",S.top===x[0]?"on":"",x[1]); bt.addEventListener("click",function(){S.top=x[0];haptic();renderTop(d);}); seg.appendChild(bt);}); b.appendChild(seg);
+  var seg=el("div","seg"); [["winners",t("🏆 Winners")],["weekly",t("🏅 Weekly")],["refs",t("👥 Referrers")],["streaks",t("🔥 Streaks")]].forEach(function(x){var bt=el("button",S.top===x[0]?"on":"",x[1]); bt.addEventListener("click",function(){S.top=x[0];haptic();renderTop(d);}); seg.appendChild(bt);}); b.appendChild(seg);
+  if(S.top==="weekly"){ renderWeekly(b,d); return; }
   if(S.top==="winners"){
     if(!d.winners.length){b.appendChild(empty(t("Pehla winner jaldi hi yahan dikhega 🏆")));return;}
+    renderResults(b,d);
+    var ah=el("div","h2"); ah.appendChild(el("span",null,t("📜 Saare winners"))); b.appendChild(ah);
     d.winners.forEach(function(w){
       var it=el("div","item"+(w.me?" me":"")); var av=avatar("🏆",44); av.style.background="linear-gradient(135deg,var(--gold),var(--pink))"; it.appendChild(av);
       var nm=el("div","nm"); nm.appendChild(nameNode(w.name,w.uname,w.me)); nm.appendChild(el("small",null,(w.no?"Giveaway #"+w.no+" · ":"")+ago(w.at)+" · "+num(w.entries)+" entries")); it.appendChild(nm);
@@ -642,8 +808,9 @@ function renderMe(d){
   var pc=card("hero"); var fl=el("div","flex"); fl.appendChild(avatar(me.name,58,tg&&tg.initDataUnsafe&&tg.initDataUnsafe.user&&tg.initDataUnsafe.user.photo_url));
   var nm=el("div"); nm.style.flex="1"; nm.appendChild(el("h3",null,me.name||t("Dost"))); nm.appendChild(el("span","pill "+(me.verified?"ok":"warn"),me.verified?t("✓ Verified"):t("Verify baaki"))); fl.appendChild(nm); pc.appendChild(fl);
   var g=el("div","row3 mt"); [[t("🎟 Tickets"),me.tickets||0],[t("🔥 Streak"),me.streak||0],[t("Referrals"),me.refs||0]].forEach(function(x){var s=el("div","stat"); s.appendChild(el("b",null,num(x[1]))); s.appendChild(el("span",null,x[0])); g.appendChild(s);}); pc.appendChild(g); b.appendChild(pc);
+  b.appendChild(walletCard(me)); b.appendChild(inviteCard(me));
 
-  var rc=card(); rc.appendChild(el("h3",null,t("👥 Refer & Earn"))); rc.appendChild(el("p",null,t("Har dost jo aapke link se aakar verify karega aur channel join karega = +1 ticket + refer card progress.")));
+  var rc=card(); rc.appendChild(el("h3",null,t("👥 Refer & Earn"))); rc.appendChild(el("p",null,t("Har dost jo aapke link ya invite code se aayega, verify karega aur channel join karega = ₹0.20 + 1 ticket + refer card progress.")));
   var rl=el("div","code"); rl.appendChild(el("code",null,me.ref_link||"")); rc.appendChild(rl);
   var br=el("div","row2 mt"); br.appendChild(B(t("📋 Copy Link"),"",function(){copy(me.ref_link,t("✅ Referral link copy ho gaya"));}));
   br.appendChild(B(t("📤 Share"),"gold",function(){openLink("https://t.me/share/url?url="+encodeURIComponent(me.ref_link)+"&text="+encodeURIComponent("🎁 Free redeem codes jeeto! Is bot ko join karo:"));})); rc.appendChild(br); b.appendChild(rc);
@@ -662,7 +829,7 @@ function renderMe(d){
   var hc=card(); hc.appendChild(el("h3",null,t("ℹ️ Madad & FAQ")));
   [[t("Kya sach me free hai?"),t("Haan, 100% free. Yahan kabhi paise nahi maange jaate.")],
    [t("Drop me code kaise milta hai?"),t("Drop live hote hi CLAIM dabao. Sabse pehle tap karne walon ko code milta hai. Lucky mode me 10 sec me JOIN karo — random winners chune jate hain.")],
-   [t("Reward cards kaise milte hain?"),t("Daily streak ya refer ke targets poore karo, card unlock hoga. Redeem Now dabao, admin 24 ghante me code DM me bhejega.")]
+   [t("Reward cards kaise milte hain?"),t("Claim Now dabao, paisa seedha balance me add ho jayega.")]
   ].forEach(function(f){var dt=el("details","faq card"); dt.appendChild(el("summary",null,f[0])); dt.appendChild(el("p",null,f[1])); hc.appendChild(dt);});
   var bb=el("div","row2 mt"); bb.appendChild(B(t("📢 Channel"),"",function(){openLink(cfg.channel_link);})); bb.appendChild(B("🆘 "+(cfg.support_username||t("Support")),"",function(){openLink(cfg.support_link);})); hc.appendChild(bb); b.appendChild(hc);
 }
