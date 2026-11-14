@@ -1,4 +1,4 @@
-# 🎁 ASB FreeCodes Bot (v3)
+# 🎁 ASB FreeCodes Bot (v4)
 
 Telegram Giveaway Bot + Website + Mini App — **Python · aiogram 3 · MongoDB Atlas · aiohttp**, Koyeb par deploy hone ke liye ready.
 Bot: http://t.me/ASBFreeCodesBot
@@ -12,6 +12,10 @@ bot.py            ← main bot
 site_app.py       ← website + API server
 static/index.html ← website / Mini App page
 requirements.txt  Dockerfile  .gitignore  .dockerignore  .env.example  README.md
+requirements-dev.txt   pytest.ini                ← tests ke liye (bot chalane ke liye zaroori nahi)
+tests/                 ← nakli DB wale tests
+scripts/backup.py      ← DB backup / restore
+.github/workflows/backup.yml  ← roz apne aap backup (GitHub Actions)
 ```
 GitHub app/web par `static/index.html` banane ke liye "Create new file" me naam `static/index.html` likhein — folder khud ban jayega.
 
@@ -53,7 +57,7 @@ GitHub app/web par `static/index.html` banane ke liye "Create new file" me naam 
 
 | Feature | Kaise kaam karta hai |
 |---|---|
-| **Refer = ₹0.20** | Dost verify + channel join kare to referrer ke **balance** me ₹0.20 (+ 1 ticket + refer card progress). `REF_REWARD_RS` se badal sakte ho. |
+| **Refer = ₹0.20** | Dost verify + channel join kare, phir `REF_MATURE_DAYS` (v4: 3 din) channel me rahe to referrer ke **balance** me ₹0.20 (+ 1 chance + refer card progress). `REF_REWARD_RS` se badal sakte ho. |
 | **Invite Code** | Har user ka invite code = uski **Telegram ID**. Bot (Refer & Earn → *Invite Code Daalo*) aur Mini App (Profile / Home) dono me daal sakte hain. Pehle channel join check hota hai — join nahi to mana, join karke dobara code daalna hota hai. Reciprocal (A↔B) aur apna code block hai. |
 | **Weekly Leaderboard** | Sunday 00:00 IST → agla Sunday. Top 3 ko **₹15 / ₹10 / ₹5** automatically balance me (sirf jinke us hafte **10+ refers** ho). Result channel par bhi post hota hai. Fraud-flag wale ka prize ruk jata hai (admin ko alert). |
 | **Reward Cards** | Card complete hone par user **Claim Now** dabata hai → paisa seedha profile balance me. |
@@ -66,6 +70,53 @@ GitHub app/web par `static/index.html` banane ke liye "Create new file" me naam 
 **Naye DB fields/collections:** `users.balance_p / earned_p / withdrawn_p` (paise me), `users.wkc.<hafte ki Sunday date>` (weekly refer count), `withdrawals` collection. Purane users ka data safe hai (fields apne aap bante hain).
 
 **Update kaise karein:** purani files (`bot.py`, `site_app.py`, `static/index.html`, `.env.example`, `README.md`) replace karo, naye env variables (upar `.env.example` me) optional hain — default already set hain. Redeploy karo.
+
+## 🛡 v4 — Ledger, Anti-fraud, Bharosa, Auto Post
+
+| Feature | Kaise kaam karta hai |
+|---|---|
+| **Paise ka ledger** | Balance har baar `wallet_apply()` se badalta hai: balance + ledger entry **ek transaction me** (credit/debit, refer id, balance_after, time). Same `ref` do baar apply nahi hota (double-credit nahi). Debit me balance kam ho to fail (double-spend nahi). Types: `refer, leaderboard, card, withdraw, refund, admin_adjust, clawback, opening`. Update ke baad pehli baar start par purane balance ki ek `opening` entry ban jati hai. |
+| **Meri Kamai** | Bot: *Paise Kamao → Meri Kamai* (last 20). Mini App: *Kamai* tab → *Meri Kamai*. |
+| **Invite code anti-fraud** | Sirf naye user (`INVITE_MAX_AGE_HOURS`=48). Galat code 5 baar/din → 24 ghante block. Code lagane se pehle "Ye code **Ravi** ka hai, pakka?" confirm. Pehle se code laga ho to bata deta hai kiska laga hai. |
+| **Refer pending → pakka** | Dost verify + join kare to refer **pending**. `REF_MATURE_DAYS`=3 din channel me rahe tabhi paisa, 🎟 chance, card progress aur leaderboard count. Beech me channel chhoda to turant cancel (referrer ko message). Ek saath bahut refers → fraud flag, paisa **held**, admin alert. |
+| **Mere Dost** | Har dost ka status: verify baaki / join baaki / pending (kitne din baaki) / pakka / cancel. Adhoora dost ko 24 ghante baad ek DM. ₹50 poora hote hi user ko alert. |
+| **Bharosa** | Paid hote hi **proof channel** par post (UPI/account masked + total paid). Withdraw par expected time + **Withdraw status** screen. **Rules & FAQ**, **Problem batao** (admins ko jata hai, screenshot bhi). Mini App me total paid + proof button. |
+| **Multi-admin** | `ADMINS` env: withdraw card sab admins ko; jo pehle Paid/Reject dabaye uska record, baaki ko "already done" aur unke card se buttons hat jate hain. |
+| **Easy messages** | Chhote, simple Hinglish. Start message me **koi paisa nahi**. 🎟 ko "chance" bola gaya hai (zyada chance = random pick me jeetne ke zyada mauke). |
+| **Image / video** | Welcome image start ke saath. Entry video link entry wale messages me chhupa hua "yahan click karke video dekho". Drop video link drop buttons ke saath. **Link na ho to kuch nahi dikhta.** |
+| **Mini App 5 tab** | Entry · Drops · Kamai (wallet, refer, dost, cards) · Top · Profile (sirf profile + settings + FAQ). Drops me "Drop kaise lein?" guide. |
+| **Channel auto post** | Har 12 ghante me ek post, topics ghoomte hain: giveaway (itne log entry kar chuke), weekly leaderboard (masked top 3 + prize), streak, refer, drop, sabse zyada kamai, about. Buttons: Bot / Mini App / video (agar set). Naya post aate hi purana hat jata hai. |
+
+### Admin commands (v4)
+| Command | Kaun | Kya |
+|---|---|---|
+| `/balance <uid>` | sab admins | balance, kamaya/nikala, pending refers, ledger ke last 5, ledger-mismatch warning |
+| `/adjust <uid> <+/-amount> <wajah>` | sab admins | confirm ke baad ledger me jata hai + user ko wajah ke saath message |
+| `/refs <uid>` | sab admins | user ke refers (kaun, kab, status) + **Ban / Clawback / Held chhodo** buttons |
+| `/dash` | sab admins | aaj ke naye users, refers, withdraws, total paid, liability |
+| `/setvideo <link>` · `/setdropvideo <link>` · `/setimage <link>` | owner | link set (band: `off`). Image: photo bhej kar caption me `/setimage` bhi chalta hai |
+| `/autopost` · `on` · `off` · `hours 12` · `now` | owner | channel auto post control |
+
+Admin Panel → **Stats** me ab sabke balance ka total (liability), total paid aur pending refers dikhte hain. **📅 Aaj ka Dashboard** button bhi hai.
+
+### v4 update kaise karein
+1. Ye files replace karo: `bot.py`, `site_app.py`, `static/index.html`, `.env.example`, `README.md`. Naye folders/files (`tests/`, `scripts/`, `.github/`, `requirements-dev.txt`, `pytest.ini`) optional hain.
+2. **Pehle deploy ke baad** ek baar check karo: bot ko task channel me **admin** banana (auto post, proof post, channel-leave detect ke liye) — post karne ki permission ke saath.
+3. Deploy ke waqt purane pending referral wale users: jo pehle hi credit ho chuke wo "pakka" ginte hain; jinke verify/join baaki the wo naye rule (3 din pending) se chalenge.
+4. Purane users ke balance ke liye ek baar `opening` ledger entry banti hai. Deploy ke dauran 1-2 minute jab dono purana aur naya instance chalein, us beech koi balance change ho to `/balance <uid>` me "Ledger mismatch" aa sakta hai — `/adjust` se theek kar do.
+5. Koyeb rolling deploy me kuch seconds purana bot bhi chalta hai — us dauran koi refer purane tareeke se credit ho sakta hai.
+
+### Tests chalana
+```
+pip install -r requirements-dev.txt
+python -m pytest -q
+```
+Tests **nakli database (mongomock) + nakli Telegram bot** se chalte hain: ledger, double-credit/double-spend, invite rules, refer pending/leave/burst/clawback, multi-admin withdraw, proof masking, routing, Mini App API, auto post, backup. ⚠️ Ye asli MongoDB Atlas ya asli Telegram nahi hai — transaction aur sach-much ki parallel race yahan test nahi hoti.
+
+### DB backup
+- **Phone se (recommended):** repo **PRIVATE** rakho → Settings → Secrets and variables → Actions → secret `MONGO_URI`. `.github/workflows/backup.yml` roz 2:30 IST par backup banata hai; file *Actions → run → Artifacts* me (14 din). Turant chalana ho to *Actions → DB Backup → Run workflow*.
+- **Kahin bhi chalana ho:** `MONGO_URI=... python scripts/backup.py` → `backups/backup-<date>.json.gz`. Restore: `python scripts/backup.py restore <file> --yes` (jo `_id` pehle se hai use overwrite nahi karta).
+- ⚠️ Backup me users ka data hota hai — repo public na ho.
 
 ## 🌐 Website
 Aapki Koyeb public URL ek proper website hai. Bot ke menu me **🎁 DAILY BONUS & REWARDS** button isi ko Telegram ke andar kholta hai (kuch install nahi karna). Mini App me user ka apna dashboard (tickets, streak, referrals, rank, referral link) dikhta hai — ye Telegram ke signed `initData` se verify hota hai, to koi doosre ka data nahi dekh sakta. Public page par sirf masked naam (`Ra***`) dikhte hain.
@@ -116,10 +167,10 @@ Winner declare hote hi giveaway ka code, links, note aur sab entries delete ho j
 
 ## ⚙️ Environment variables
 `.env.example` me poori list hai. Ye hamesha apne Koyeb me set karke rakhein: `BOT_TOKEN`, `MONGO_URI`, `TASK_CHANNEL_ID`, `TASK_CHANNEL_LINK`, `LOG_CHANNEL_ID`, `WEBSITE_URL`.
-Doosre: `REFERRAL_TICKETS` (1), `MAX_BONUS_TICKETS` (20), `MAX_SPONSORS` (5), `POST_WINNER_TO_CHANNEL` (true), `MAX_WRONG_ATTEMPTS` (3), `LOCK_HOURS` (24), `WINNER_NOTIFY` (`entries` ya `all`).
+v4 ke naye variables `.env.example` ke neeche wale block me hain. Doosre: `REFERRAL_TICKETS` (1), `MAX_BONUS_TICKETS` (20), `MAX_SPONSORS` (5), `POST_WINNER_TO_CHANNEL` (true), `MAX_WRONG_ATTEMPTS` (3), `LOCK_HOURS` (24), `WINNER_NOTIFY` (`entries` ya `all`).
 
 ## 📝 Notes
-- Tickets: entry = 1 ticket. Entry se pehle mile bonus tickets entry par lag jaate hain; entry ke baad mile (referral/streak) seedha entry me jodte hain. Random pick me cap = 1 + `MAX_BONUS_TICKETS`.
+- Tickets (users ko "chance" dikhte hain): entry = 1 chance. Entry se pehle mile bonus tickets entry par lag jaate hain; entry ke baad mile (referral/streak) seedha entry me jodte hain. Random pick me cap = 1 + `MAX_BONUS_TICKETS`.
 - Naya giveaway shuru karte waqt agar purana chal raha ho to bot pooochta hai: ✏️ Edit karo ya 🆕 Naya (purani entries delete).
 - Multi-winner me agar kisi winner ko DM na ja paye to jinko code chala gaya unki entry hata di jati hai aur giveaway wapas khul jata hai; baaki winner dobara chun kar declare karein.
 - Admin ka input session ab 30 minute tak chalta hai.
