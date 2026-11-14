@@ -292,7 +292,7 @@ var EN = {
 "💰 Wallet":"💰 Wallet","Profile kholo":"Open Profile",
 "Claim Now dabao, paisa seedha balance me add ho jayega.":"Tap Claim Now and the money goes straight to your balance."
 };
-var EN2={"Entry":"Entry","Kamai":"Earn","🎟 Jitne zyada chance, jeetne ke utne zyada mauke (random pick me).":"🎟 More chances = better odds to win (random pick).",
+var EN2={"Entry":"Entry","Kamai":"Earn","▶️ Entry kaise karein? Video dekho":"▶️ How to enter? Watch video","▶️ Drop kaise claim karein? Video dekho":"▶️ How to claim a drop? Watch video","▶️ Poora bot kaise chalta hai? Video dekho":"▶️ How the whole bot works? Watch video","🎟 Jitne zyada chance, jeetne ke utne zyada mauke (random pick me).":"🎟 More chances = better odds to win (random pick).",
 "Aapke Chance 🎟":"Your Chances 🎟","📝 Entry kaise karein?":"📝 How to enter?","1️⃣ Bot me 🛡 Verify karo":"1️⃣ Verify in the bot 🛡","2️⃣ 📢 Channel join karo":"2️⃣ Join the channel 📢",
 "3️⃣ 🔍 Channel me chhupa code dhundo":"3️⃣ Find the hidden code 🔍","4️⃣ 🔑 Bot me code bhejo — entry pakki ✅":"4️⃣ Send the code in the bot — entry done ✅",
 "▶️ Video dekho: entry kaise karein":"▶️ Watch video: how to enter","👥 Entry list dekho":"👥 See entry list","⬅️ Wapas":"⬅️ Back",
@@ -495,7 +495,6 @@ function stepsCard(){
   var ol=el("div","steps");
   ["1️⃣ Bot me 🛡 Verify karo","2️⃣ 📢 Channel join karo","3️⃣ 🔍 Channel me chhupa code dhundo","4️⃣ 🔑 Bot me code bhejo — entry pakki ✅"].forEach(function(x){ol.appendChild(el("p",null,t(x)));});
   c.appendChild(ol);
-  var v=vidBtn("entry_video",t("▶️ Video dekho: entry kaise karein")); if(v){v.style.marginTop="10px";c.appendChild(v);}
   return c;
 }
 function renderHome(d){
@@ -523,6 +522,7 @@ function renderHome(d){
   else if(g.active) cta.appendChild(B(t("🔑 Enter Code (Bot me)"),"gold",openBot));
   else cta.appendChild(el("p",null,t("Naya giveaway shuru hone par channel par notification aayega 🔔")));
   var ex=el("p","mut mt",t("🎟 Jitne zyada chance, jeetne ke utne zyada mauke (random pick me).")); ex.style.fontSize=".8rem"; cta.appendChild(ex);
+  var ev=vidBtn("entry_video",t("▶️ Entry kaise karein? Video dekho")); if(ev){ev.style.marginTop="10px"; cta.appendChild(ev);}
   var lb=B(t("👥 Entry list dekho"),"",function(){go("entries");}); lb.style.marginTop="10px"; cta.appendChild(lb);
   hero.appendChild(cta); b.appendChild(hero);
 
@@ -583,8 +583,8 @@ function wallList(wall,limit){
 function renderDrops(d){
   var b=$("#t-drops"); b.textContent=""; var cur=d.drops.current, me=d.me;
   var h=el("div","h2"); h.appendChild(el("span",null,t("⚡ Free Code Drops"))); b.appendChild(h);
-  var gr=el("div","row2"); gr.style.marginBottom="12px"; gr.appendChild(B(t("❓ Drop kaise lein?"),"",showDropGuide));
-  var dv=vidBtn("drop_video",t("▶️ Video")); if(dv) gr.appendChild(dv); b.appendChild(gr);
+  var gr=el("div"); gr.style.marginBottom="12px"; var g1=B(t("❓ Drop kaise lein?"),"",showDropGuide); g1.style.marginBottom="8px"; gr.appendChild(g1);
+  var dv=vidBtn("drop_video",t("▶️ Drop kaise claim karein? Video dekho")); if(dv) gr.appendChild(dv); b.appendChild(gr);
 
   if(!cur){
     var c=card(); c.appendChild(el("h3",null,t("Abhi koi drop nahi"))); c.appendChild(el("p",null,t("Admin kabhi bhi free redeem code drop karta hai. Channel ke notification ON rakhein 🔔 — drop se pehle teaser aata hai, tab Google Play Store ka Redeem screen kholkar ready baith jao!")));
@@ -843,7 +843,7 @@ function showDropGuide(){
     var ol=el("div","steps"); ol.style.textAlign="left";
     ["1️⃣ Channel ke notification ON rakho 🔔","2️⃣ Google Play → Menu → Payments → Redeem code screen kholo","3️⃣ Drop live hote hi 🎁 CLAIM NOW dabao","4️⃣ Code copy karke Redeem me daalo"].forEach(function(x){ol.appendChild(el("p",null,t(x)));});
     sh.appendChild(ol); sh.appendChild(el("p","mut",t("Pehle wale ko code milta hai. Lucky drop me 10 sec me JOIN karo.")));
-    var v=vidBtn("drop_video",t("▶️ Video dekho: entry kaise karein")); if(v){v.textContent="▶️ Video"; v.style.marginTop="10px"; sh.appendChild(v);}
+    var v=vidBtn("drop_video",t("▶️ Drop kaise claim karein? Video dekho")); if(v){v.style.marginTop="10px"; sh.appendChild(v);}
     var row=el("div","mt"); row.appendChild(B(t("Close"),"",close)); sh.appendChild(row);
   });
 }
@@ -944,6 +944,9 @@ function renderMe(d){
    [t("Drop me code kaise milta hai?"),t("Drop live hote hi CLAIM dabao. Sabse pehle tap karne walon ko code milta hai. Lucky mode me 10 sec me JOIN karo — random winners chune jate hain.")],
    [t("Kya galat hai?"),t("Fake account ya khud ko refer karna = refer cancel + ban.")]
   ].forEach(function(f){var dt=el("details","faq card"); dt.appendChild(el("summary",null,f[0])); dt.appendChild(el("p",null,f[1])); hc.appendChild(dt);});
+  [["entry_video",t("▶️ Entry kaise karein? Video dekho")],["drop_video",t("▶️ Drop kaise claim karein? Video dekho")],["bot_video",t("▶️ Poora bot kaise chalta hai? Video dekho")]].forEach(function(x){
+    var vb=vidBtn(x[0],x[1]); if(vb){vb.style.marginTop="10px"; hc.appendChild(vb);}
+  });
   var bb=el("div","row2 mt"); bb.appendChild(B(t("📢 Channel"),"",function(){openLink(cfg.channel_link);})); bb.appendChild(B("🆘 "+(cfg.support_username||t("Support")),"",function(){openLink(cfg.support_link);})); hc.appendChild(bb);
   var rp=B(t("🆘 Problem report"),"vio",function(){openLink((cfg.bot_link||("https://t.me/"+cfg.bot_username))+"?start=report");}); rp.style.marginTop="10px"; hc.appendChild(rp);
   b.appendChild(hc);
