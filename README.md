@@ -83,9 +83,9 @@ GitHub app/web par `static/index.html` banane ke liye "Create new file" me naam 
 | **Bharosa** | Paid hote hi **proof channel** par post (UPI/account masked + total paid). Withdraw par expected time + **Withdraw status** screen. **Rules & FAQ**, **Problem batao** (admins ko jata hai, screenshot bhi). Mini App me total paid + proof button. |
 | **Multi-admin** | `ADMINS` env: withdraw card sab admins ko; jo pehle Paid/Reject dabaye uska record, baaki ko "already done" aur unke card se buttons hat jate hain. |
 | **Easy messages** | Chhote, simple Hinglish. Start message me **koi paisa nahi**. 🎟 ko "chance" bola gaya hai (zyada chance = random pick me jeetne ke zyada mauke). |
-| **Image / video** | Welcome image start ke saath. Entry video link entry wale messages me chhupa hua "yahan click karke video dekho". Drop video link drop buttons ke saath. **Link na ho to kuch nahi dikhta.** |
+| **Image / video** | Links **bot.py ke bilkul upar** hain (`ENTRY_VIDEO_URL`, `DROP_VIDEO_URL`, `BOT_VIDEO_URL`, `WELCOME_IMAGE_URL`). Entry video button: start/menu, code daalo, galat code retry, channel giveaway post, Help, Mini App Entry tab. Drop video button: drop teaser/live/done posts, claim DM, Help, Mini App Drops tab. `BOT_VIDEO_URL` (poora bot kaise chalta hai) aur `WELCOME_IMAGE_URL` (start par image) abhi khaali hain — link daaloge to apne aap dikhne lagenge. **Link khaali = button / image dikhta hi nahi.** |
 | **Mini App 5 tab** | Entry · Drops · Kamai (wallet, refer, dost, cards) · Top · Profile (sirf profile + settings + FAQ). Drops me "Drop kaise lein?" guide. |
-| **Channel auto post** | Har 12 ghante me ek post, topics ghoomte hain: giveaway (itne log entry kar chuke), weekly leaderboard (masked top 3 + prize), streak, refer, drop, sabse zyada kamai, about. Buttons: Bot / Mini App / video (agar set). Naya post aate hi purana hat jata hai. |
+| **Channel auto post** | Har 12 ghante me **ek** post, aur har baar **nayi cheez** (12 topics ghoomte hain): giveaway (kitne log, kitne ne entry ki), bot kaise use karein, weekly leaderboard, drop (kitne codes bache), kamai ke tarike, streak, winners, refer, free Google Play code kaise milta hai, chance (ticket) kya hai, sabse zyada kamai, about. Har post me asli ginti + "kaise karein" steps + buttons (Bot / Mini App / video). Jis topic ka data na ho (jaise drop nahi chal raha) wo skip. Naya post aate hi purana hat jata hai. |
 
 ### Admin commands (v4)
 | Command | Kaun | Kya |
@@ -94,7 +94,6 @@ GitHub app/web par `static/index.html` banane ke liye "Create new file" me naam 
 | `/adjust <uid> <+/-amount> <wajah>` | sab admins | confirm ke baad ledger me jata hai + user ko wajah ke saath message |
 | `/refs <uid>` | sab admins | user ke refers (kaun, kab, status) + **Ban / Clawback / Held chhodo** buttons |
 | `/dash` | sab admins | aaj ke naye users, refers, withdraws, total paid, liability |
-| `/setvideo <link>` · `/setdropvideo <link>` · `/setimage <link>` | owner | link set (band: `off`). Image: photo bhej kar caption me `/setimage` bhi chalta hai |
 | `/autopost` · `on` · `off` · `hours 12` · `now` | owner | channel auto post control |
 
 Admin Panel → **Stats** me ab sabke balance ka total (liability), total paid aur pending refers dikhte hain. **📅 Aaj ka Dashboard** button bhi hai.
