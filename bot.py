@@ -159,11 +159,19 @@ REPORT_PER_HOUR = int(os.getenv("REPORT_PER_HOUR", "3"))                        
 AUTOPOST_HOURS = float(os.getenv("AUTOPOST_HOURS", "12"))                            # channel par auto post har itne ghante
 AUTOPOST_DEFAULT_ON = os.getenv("AUTOPOST", "true").strip().lower() not in ("0", "false", "off", "no")
 AUTOPOST_DELETE_OLD = os.getenv("AUTOPOST_DELETE_OLD", "true").strip().lower() not in ("0", "false", "off", "no")
-# Image / video links: admin bot se set karta hai (config me save), warna ye env default
+
+# ======================================================================
+#  VIDEO / IMAGE LINKS  —  yahan seedha link daalo.  Khaali "" = wo button / image dikhega hi nahi.
+# ======================================================================
+ENTRY_VIDEO_URL = "https://www.instagram.com/reel/DftSgowMl7M/?cplk=c29odnFtcm56aWpw"   # Entry kaise karein
+DROP_VIDEO_URL = "https://www.instagram.com/reel/DftY_EMNJoZ/?dlrf=M3VsdW1uemk2MHR5"      # Drop kaise claim karein
+BOT_VIDEO_URL = ""        # <-- poora bot kaise kaam karta hai: video ka link yahan daalna (baad me)
+WELCOME_IMAGE_URL = ""    # <-- /start message ke saath image: image ka link yahan daalna (baad me)
 LINKS = {
-    "welcome_image": os.getenv("WELCOME_IMAGE", "").strip(),
-    "entry_video": os.getenv("ENTRY_VIDEO_URL", "").strip(),
-    "drop_video": os.getenv("DROP_VIDEO_URL", "").strip(),
+    "welcome_image": WELCOME_IMAGE_URL.strip(),
+    "entry_video": ENTRY_VIDEO_URL.strip(),
+    "drop_video": DROP_VIDEO_URL.strip(),
+    "bot_video": BOT_VIDEO_URL.strip(),
 }
 
 logging.basicConfig(
@@ -374,6 +382,7 @@ def giveaway_post_text(gw: dict) -> str:
 def giveaway_post_kb(gw: dict) -> InlineKeyboardMarkup:
     rows = code_links_rows(gw)
     rows.append([btn("🔑 Enter Code", url=f"https://t.me/{BOT_USERNAME}?start=code")])
+    rows += entry_video_row()
     return kb(*rows)
 
 
@@ -389,6 +398,7 @@ def main_menu_kb(verified: bool = True) -> InlineKeyboardMarkup:
         rows.append([btn("🛡 " + sc("verify karo (1 tap)"), "verify")])
     rows += [
         [btn("🔑 " + sc("code daalo"), "enter_code")],
+        *entry_video_row(),
         [btn("💰 " + sc("paise kamao"), "refer"), btn("📱 " + sc("app kholo"), web_app=WEBSITE_URL)],
         [btn("📢 " + sc("channel"), url=TASK_CHANNEL_LINK), btn("❓ " + sc("madad"), "help")],
         [btn("ℹ️ " + sc("about"), "about")],
@@ -409,6 +419,7 @@ def retry_kb(gw: Optional[dict] = None) -> InlineKeyboardMarkup:
     rows += [
         [btn("🔑 Dobara Code Daalo", "enter_code")],
         [btn("📢 Join Channel", url=TASK_CHANNEL_LINK)],
+        *entry_video_row(),
     ]
     return kb(*rows)
 
@@ -443,12 +454,26 @@ ADMIN_HOME_TEXT = "👑 <b>Admin Panel</b>\n\nKya karna chahte hain? 👇"
 
 
 # ---------------------------------------------------------------- texts
-def video_line(kind: str = "entry_video", label: str = "Entry kaise karein? Yahan click karke video dekho") -> str:
-    """Video link chhupa hua (link text me). Link set nahi hai to kuch nahi dikhega."""
-    u = (LINKS.get(kind) or "").strip()
-    if not u.startswith(("http://", "https://")):
-        return ""
-    return f'\n\n▶️ <a href="{esc(u)}">{esc(label)}</a>'
+def _video_row(key: str, label: str) -> list:
+    """Video link set ho to ek button row, warna khaali (kuch nahi dikhta)."""
+    u = (LINKS.get(key) or "").strip()
+    return [[btn(label, url=u)]] if u.startswith(("http://", "https://")) else []
+
+
+def entry_video_row() -> list:
+    return _video_row("entry_video", "▶️ Entry kaise karein? Video dekho")
+
+
+def drop_video_row() -> list:
+    return _video_row("drop_video", "▶️ Drop kaise claim karein? Video dekho")
+
+
+def bot_video_row() -> list:
+    return _video_row("bot_video", "▶️ Poora bot kaise chalta hai? Video dekho")
+
+
+def video_hint() -> str:
+    return "\n▶️ <i>Samajh na aaye to neeche <b>video</b> dekho.</i>" if (LINKS.get("entry_video") or "").strip() else ""
 
 
 def welcome_text(name: str) -> str:
@@ -462,7 +487,7 @@ def welcome_text(name: str) -> str:
         "3️⃣ Winner ko code <b>DM</b> me milta hai 🏆"
         "</blockquote>\n\n"
         "🔒 <i>OTP ya password hum kabhi nahi maangte.</i>"
-        f"{video_line()}\n\n"
+        f"{video_hint()}\n\n"
         "👇 <b>Neeche se shuru karo</b>"
     )
 
@@ -470,19 +495,25 @@ def welcome_text(name: str) -> str:
 def help_text() -> str:
     return (
         "❓ <b>Madad</b>\n\n"
-        "<b>Entry kaise karein?</b>\n"
+        "<b>🔑 Giveaway me entry kaise karein?</b>\n"
         "<blockquote>"
         "1️⃣ 🛡 Verify karo (1 tap)\n"
         "2️⃣ 📢 Channel join karo\n"
         "3️⃣ 🔍 Video / post me chhupa code dhundo\n"
-        "4️⃣ 🔑 Code bhejo — entry pakki ✅"
+        "4️⃣ 🔑 Code bot me bhejo — entry pakki ✅"
+        "</blockquote>\n\n"
+        "<b>⚡ Drop (Free Google Play code) kaise milta hai?</b>\n"
+        "<blockquote>"
+        "1️⃣ Channel par Drop announce hota hai — <b>Remind Me</b> dabao 🔔\n"
+        "2️⃣ Drop live hote hi <b>CLAIM NOW</b> dabao\n"
+        "3️⃣ Jo sabse pehle dabata hai use code milta hai\n"
+        "4️⃣ Code copy karke Google Play me <b>Redeem</b> karo"
         "</blockquote>\n\n"
         "<b>🎟 Chance kya hai?</b>\n"
         "Winner <b>random</b> chuna jata hai. Jiske paas zyada 🎟 chance, uska naam aane ke mauke zyada.\n"
         "Chance badhao: dost ko bulao, roz Daily Bonus lo.\n\n"
         f"⚠️ {MAX_WRONG_ATTEMPTS} galat code = {LOCK_HOURS} ghante ka lock. Ek giveaway me ek hi entry.\n\n"
         f"🆘 Dikkat? {esc(SUPPORT_USERNAME)}"
-        f"{video_line()}"
     )
 
 
@@ -503,7 +534,7 @@ def entry_confirmed_text(
         "",
         "💡 <i>Zyada 🎟 chance = jeetne ke zyada mauke. Dost ko bulao, chance badhao.</i>",
     ]
-    base = "\n".join(lines) + video_line()
+    base = "\n".join(lines)
     if admin_msg:
         base += "\n\n━━━━━━━━━━━━━━\n📩 <b>Admin ka message:</b>\n\n" + admin_msg
     return base
@@ -574,10 +605,6 @@ async def init_db() -> None:
     await referrals.create_index([("status", 1), ("mature_at", 1)])
     await users.create_index("ref_by")
     await ensure_week_index(week_key())
-    lk = await config.find_one({"_id": "links"})
-    for k in LINKS:
-        if lk and k in lk:
-            LINKS[k] = lk[k] or ""
     cfg = await config.find_one({"_id": "reward_cfg"})
     for k in ("streak", "refer"):
         if cfg and cfg.get(k):
@@ -1567,6 +1594,9 @@ async def cb_help(cb: CallbackQuery):
         cb,
         help_text(),
         kb(
+            *entry_video_row(),
+            *drop_video_row(),
+            *bot_video_row(),
             [btn("📋 " + sc("rules & faq"), "faq"), btn("🆘 " + sc("problem batao"), "report")],
             [btn("👤 " + sc("support"), url=SUPPORT_LINK)],
             [btn("⬅️ " + sc("back"), "menu")],
@@ -1742,8 +1772,7 @@ async def enter_code_flow(user: User) -> None:
     wt = when_line(gw)
     if wt:
         text += "\n\n" + wt
-    text += video_line()
-    rows = code_links_rows(gw)
+    rows = code_links_rows(gw) + entry_video_row()
     await bot.send_message(uid, text, reply_markup=kb(*rows) if rows else None)
 
 
@@ -3368,7 +3397,7 @@ async def handle_admin_state(m: Message, st: dict) -> None:
 #  CATCH-ALL MESSAGE ROUTER  (state ke hisaab se)
 # ======================================================================
 # ======================================================================
-#  v4: ADMIN / STAFF COMMANDS  (/balance /adjust /refs /dash  +  owner: /setvideo /setdropvideo /setimage)
+#  v4: ADMIN / STAFF COMMANDS  (/balance /adjust /refs /dash)
 # ======================================================================
 async def sum_field(coll, match: dict, field: str) -> int:
     cur = await coll.aggregate([{"$match": match}, {"$group": {"_id": None, "t": {"$sum": f"${field}"}}}])
@@ -3651,60 +3680,6 @@ async def cb_refs_admin(cb: CallbackQuery):
         await bot.send_message(me, f"▶️ {n} held refers chhod diye. Flag hata diya (5 min me settle honge).")
 
 
-# ---- owner: image / video links (bot se set, redeploy nahi chahiye)
-async def save_link(key: str, value: str) -> None:
-    LINKS[key] = value
-    await config.update_one({"_id": "links"}, {"$set": {key: value}}, upsert=True)
-
-
-def link_cmd(key: str, name: str):
-    async def handler(m: Message, command: CommandObject):
-        if not is_admin(m.from_user.id):
-            return
-        arg = (command.args or "").strip()
-        if arg.lower() in ("off", "none", "hata"):
-            await save_link(key, "")
-            await m.answer(f"✅ {name} band kar diya.")
-        elif arg.startswith(("http://", "https://")):
-            await save_link(key, arg)
-            await m.answer(f"✅ {name} set ho gaya:\n{esc(arg)}")
-        else:
-            cur = LINKS.get(key) or "set nahi"
-            await m.answer(f"Use: <code>/{command.command} https://link</code>  (band: <code>/{command.command} off</code>)\nAbhi: {esc(cur)}")
-
-    return handler
-
-
-router.message.register(link_cmd("entry_video", "Entry video link"), Command("setvideo"))
-router.message.register(link_cmd("drop_video", "Drop video link"), Command("setdropvideo"))
-
-
-@router.message(F.photo, F.caption.startswith("/setimage"))
-async def cmd_setimage_photo(m: Message):
-    if not is_admin(m.from_user.id):
-        return
-    await save_link("welcome_image", m.photo[-1].file_id)
-    await m.answer("✅ Welcome image set ho gayi. /start dabake dekho.")
-
-
-@router.message(Command("setimage"))
-async def cmd_setimage(m: Message, command: CommandObject):
-    if not is_admin(m.from_user.id):
-        return
-    arg = (command.args or "").strip()
-    if arg.lower() in ("off", "none", "hata"):
-        await save_link("welcome_image", "")
-        await m.answer("✅ Welcome image band kar di.")
-    elif arg.startswith(("http://", "https://")):
-        await save_link("welcome_image", arg)
-        await m.answer("✅ Welcome image link set ho gaya. /start dabake dekho.")
-    else:
-        await m.answer(
-            "Use: <code>/setimage https://image-link</code>\nYa koi <b>photo bhejo, caption me</b> <code>/setimage</code> likho.\n"
-            "Band karne ke liye: <code>/setimage off</code>"
-        )
-
-
 # ======================================================================
 #  v4: CHANNEL AUTO POST  (har AUTOPOST_HOURS ghante me ek post — bharosa badhane ke liye)
 #  Topics ghoomte rehte hain: giveaway / leaderboard / streak / refer / drop / kamai / about
@@ -3713,29 +3688,58 @@ def _medal(i: int) -> str:
     return ("🥇", "🥈", "🥉")[i] if i < 3 else f"{i + 1}."
 
 
-def _post_rows(extra: Optional[list] = None, video: str = "entry_video", video_label: str = "▶️ Entry kaise karein? Video dekho") -> InlineKeyboardMarkup:
-    rows = [[btn("🤖 Bot kholo — Entry karo", url=BOT_LINK)], [btn("📱 Mini App", url=app_link())]]
-    rows += extra or []
-    u = (LINKS.get(video) or "").strip()
-    if u.startswith(("http://", "https://")):
-        rows.append([btn(video_label, url=u)])
+def _post_rows(videos: tuple = ("entry",), first: str = "🤖 Bot kholo — Shuru karo") -> InlineKeyboardMarkup:
+    """Har post ke neeche buttons: Bot, Mini App, aur jo videos is topic ke liye (agar link set hai)."""
+    rows = [[btn(first, url=BOT_LINK)], [btn("📱 Mini App kholo", url=app_link())]]
+    for v in videos:
+        rows += {"entry": entry_video_row, "drop": drop_video_row, "bot": bot_video_row}[v]()
     return kb(*rows)
+
+
+async def bot_numbers() -> dict:
+    """Post me dikhane ke liye asli ginti: kitne log, kitni entry, drop me kitna bacha."""
+    users_n = await users.count_documents({"junk": {"$ne": True}, "banned": {"$ne": True}})
+    entries_n = await entries.count_documents({})
+    d = await active_drop()
+    total = int(d.get("total", 0)) if d else 0
+    claimed = int(d.get("claimed_count", 0)) if d else 0
+    return {"users": users_n, "entries": entries_n, "drop": d, "drop_total": total, "drop_claimed": claimed,
+            "drop_left": max(0, total - claimed)}
 
 
 async def post_giveaway():
     gw = await get_giveaway()
     if not gw or gw.get("closing"):
         return None
-    total = await entries.count_documents({})
-    head = f"👥 Ab tak <b>{total}</b> log entry kar chuke hain!" if total else "👥 Abhi koi entry nahi hui — <b>sabse pehle aap</b> bano!"
+    n = await bot_numbers()
     when = f"\n⏰ Winner: <b>{esc(fmt_when(gw['winner_at']))}</b>" if gw.get("winner_at") else ""
     text = (
         "🎁 <b>Giveaway LIVE hai!</b>\n\n"
-        f"{head}\nAap bhi <b>entry karo</b> aur <b>Google Play code</b> jeeto 🏆{when}\n\n"
+        f"👥 Bot par <b>{n['users']}</b> log hain\n"
+        f"✅ <b>{n['entries']}</b> ne entry kar li" + ("" if n["entries"] else " — <b>sabse pehle aap</b> bano!") + f"{when}\n\n"
+        "<b>Entry kaise karein:</b>\n"
+        "1️⃣ Bot kholo 🤖  2️⃣ Verify karo 🛡\n"
+        "3️⃣ Channel join karo 📢\n"
+        "4️⃣ Chhupa code dhundo, bot me bhejo 🔑\n\n"
         "🎟 Zyada chance = jeetne ke zyada mauke.\n"
-        "<i>Entry bilkul free hai — OTP ya password hum kabhi nahi maangte.</i>"
+        "<i>100% free — OTP / password kabhi nahi maangte.</i>"
     )
-    return text, _post_rows()
+    return text, _post_rows(("entry",), "🔑 Entry karo")
+
+
+async def post_howto():
+    n = await bot_numbers()
+    text = (
+        "🤖 <b>Is bot ko kaise use karein?</b>\n\n"
+        f"👥 Ab tak <b>{n['users']}</b> log juda chuke hain.\n\n"
+        "<b>3 asaan step:</b>\n"
+        "1️⃣ Bot kholo aur <b>Verify</b> karo (1 tap) 🛡\n"
+        "2️⃣ Channel join karo, <b>giveaway code</b> dhundo aur bot me bhejo 🔑\n"
+        "3️⃣ Roz <b>Mini App</b> khol kar Daily Bonus lo 🎁\n\n"
+        "<b>Fayda:</b> Free Google Play codes jeeto, aur dost bulao to paise bhi kamao 💰\n"
+        "<i>Sab bilkul free hai.</i>"
+    )
+    return text, _post_rows(("entry", "bot"))
 
 
 async def post_leaderboard():
@@ -3752,13 +3756,16 @@ async def post_leaderboard():
         else:
             lines.append(f"{_medal(i)} <i>khaali — yahan aap ho sakte ho</i>  ·  🎁 ₹{prizes[i]}")
     end = week_end_dt()
+    need = max(LB_MIN_REFS - top_n, 0)
     text = (
         "🏆 <b>Weekly Leaderboard</b>\n\n" + "\n".join(lines) + "\n\n"
-        f"📊 Abhi top par <b>{top_n}</b> refers hain. Prize ke liye kam se kam <b>{LB_MIN_REFS}</b> refers chahiye.\n"
+        f"📊 Abhi top par <b>{top_n}</b> refers hain. Prize ke liye kam se kam <b>{LB_MIN_REFS}</b> refers chahiye"
+        + (f" (abhi {need} aur)." if need else " ✅") + "\n"
         f"⏳ Hafta khatam: <b>{esc(fmt_when(end))}</b>\n\n"
-        "Dost ko bulao, upar chadho — prize seedha balance me 💰"
+        "<b>Upar kaise chadhein:</b> Bot → 💰 Paise Kamao → apna code / link dost ko bhejo. "
+        "Dost verify + join kare aur 3 din rahe to refer pakka. Prize seedha balance me 💰"
     )
-    return text, _post_rows()
+    return text, _post_rows(("bot",), "💰 Refer karo — Bot kholo")
 
 
 async def post_streak():
@@ -3769,12 +3776,12 @@ async def post_streak():
     tops = "\n".join(f"{_medal(i)} {esc(mask_name(u.get('name')))} — 🔥 {u.get('streak', 0)} din" for i, u in enumerate(top))
     text = (
         "🔥 <b>Daily Streak — roz aao, card jeeto</b>\n\n"
-        "Roz <b>Daily Bonus</b> lo, streak badhao. Streak cards poore karo to paisa seedha balance me:\n"
-        f"🎯 {cards_line}\n"
+        "<b>Kaise:</b> Mini App kholo → 🎁 <b>Daily Bonus</b> dabao. Roz aao, streak tootne mat do.\n\n"
+        f"🎯 Streak cards (paisa seedha balance me):\n{cards_line}\n"
         + (f"\n🏅 <b>Abhi ke top streak:</b>\n{tops}\n" if top else "")
-        + "\n🎟 Har bonus se aapke jeetne ke chance bhi badhte hain."
+        + "\n🎟 Har milestone par aapke jeetne ke chance bhi badhte hain."
     )
-    return text, _post_rows(video="entry_video")
+    return text, _post_rows(("bot",), "🎁 Daily Bonus lo")
 
 
 async def post_refer():
@@ -3785,33 +3792,99 @@ async def post_refer():
     tops = "\n".join(f"{_medal(i)} {esc(mask_name(u.get('name')))} — {u.get('ref_count', 0)} dost" for i, u in enumerate(top))
     text = (
         "👥 <b>Dost bulao, paise kamao</b>\n\n"
-        f"Har <b>pakke dost</b> par <b>{rs(REF_REWARD_PAISE)}</b> + 🎟 chance milta hai.\n"
+        f"Har <b>pakke dost</b> par <b>{rs(REF_REWARD_PAISE)}</b> + 🎟 chance.\n"
         f"✅ Ab tak <b>{total_refs}</b> refers pakke hue"
         + (f"\n💸 Ab tak <b>{rs(paid_p)}</b> ({paid_n} payments) users ko bheje ja chuke hain" if paid_p else "")
         + (f"\n\n🏅 <b>Top referrers:</b>\n{tops}" if top else "")
-        + f"\n\nWithdraw {rs(MIN_WITHDRAW_PAISE)} se. Har payment ka proof is channel par aata hai ✅"
+        + "\n\n<b>Kaise karein:</b>\n"
+        "1️⃣ Bot → 💰 Paise Kamao kholo\n"
+        "2️⃣ Apna <b>Invite Code / Link</b> dost ko bhejo\n"
+        f"3️⃣ Dost verify + channel join kare aur {REF_MATURE_DAYS:g} din rahe → paisa pakka ✅\n\n"
+        f"Withdraw {rs(MIN_WITHDRAW_PAISE)} se. Har payment ka proof is channel par aata hai."
     )
-    return text, _post_rows()
+    return text, _post_rows(("bot",), "👥 Refer karo — Bot kholo")
 
 
 async def post_drop():
-    d = await active_drop()
+    n = await bot_numbers()
+    d = n["drop"]
     if not d:
         return None
     if d.get("status") == "live":
         text = (
             f"⚡ <b>Drop #{d['_id']} LIVE hai!</b>\n\n🎁 {esc(d.get('label', 'Google Play Redeem Code'))}\n"
-            f"📦 Total codes: <b>{d.get('total', 0)}</b>  ·  ✅ Claim hue: <b>{d.get('claimed_count', 0)}</b>\n\n"
-            "Jaldi karo — pehle aane walon ko code milta hai 🏃"
+            f"📦 Total: <b>{n['drop_total']}</b>  ·  ✅ Claim hue: <b>{n['drop_claimed']}</b>  ·  🔥 Bache: <b>{n['drop_left']}</b>\n\n"
+            "<b>Claim kaise karein:</b>\n1️⃣ Bot / Mini App kholo\n2️⃣ <b>CLAIM NOW</b> dabao\n"
+            "3️⃣ Code DM me aayega — Google Play me <b>Redeem</b> karo\n\n"
+            "Jaldi karo, pehle aane walon ko milta hai 🏃"
         )
     else:
         when = esc(fmt_when(d.get("go_live_at"))) if d.get("go_live_at") else "jaldi"
         text = (
             f"⚡ <b>Naya Drop aa raha hai!</b>\n\n🎁 {esc(d.get('label', 'Google Play Redeem Code'))}\n"
-            f"📦 Codes: <b>{d.get('total', 0)}</b>  ·  ⏰ Live: <b>{when}</b>\n\n"
-            "Bot me <b>Remind Me</b> dabao, notification ON rakho 🔔"
+            f"📦 Codes: <b>{n['drop_total']}</b>  ·  ⏰ Live: <b>{when}</b>\n\n"
+            "Bot me <b>Remind Me</b> dabao, notification ON rakho 🔔\nLive hote hi CLAIM NOW dabana!"
         )
-    return text, _post_rows(video="drop_video", video_label="▶️ Drop kaise lein? Video dekho")
+    return text, _post_rows(("drop",), "⚡ Drop claim karo")
+
+
+async def post_drop_info():
+    text = (
+        "⚡ <b>Free Google Play Redeem Code kab aur kaise milta hai?</b>\n\n"
+        "Kabhi kabhi channel par <b>Drop</b> aata hai — kuch Google Play codes thodi der ke liye live hote hain.\n\n"
+        "<b>Kaise lein:</b>\n"
+        "1️⃣ Drop announce hote hi bot me <b>Remind Me</b> dabao 🔔\n"
+        "2️⃣ Live hote hi <b>CLAIM NOW</b> dabao\n"
+        "3️⃣ Jo sabse pehle dabata hai use code milta hai\n"
+        "4️⃣ Code copy karke Google Play → Redeem me daalo ✅\n\n"
+        "💡 Notification ON rakho, tabhi pata chalega."
+    )
+    return text, _post_rows(("drop",), "🔔 Bot kholo — Remind Me")
+
+
+async def post_earn_ways():
+    cards_s = "  ·  ".join(f"{d} din = ₹{a}" for d, a in (REWARD_CFG.get("streak") or []))
+    cards_r = "  ·  ".join(f"{d} refer = ₹{a}" for d, a in (REWARD_CFG.get("refer") or []))
+    text = (
+        "💰 <b>Is bot se paise kaise kamayein?</b>\n\n"
+        f"1️⃣ <b>Refer:</b> har pakke dost par {rs(REF_REWARD_PAISE)}\n"
+        f"2️⃣ <b>Weekly Leaderboard:</b> top 3 ko {prizes_line()} ({LB_MIN_REFS}+ refers)\n"
+        f"3️⃣ <b>Streak cards:</b> {cards_s}\n"
+        f"4️⃣ <b>Refer cards:</b> {cards_r}\n"
+        "5️⃣ <b>Giveaway + Drops:</b> free Google Play codes 🎁\n\n"
+        f"💸 Withdraw {rs(MIN_WITHDRAW_PAISE)} se — UPI / Bank / Mobile. Har payment ka proof yahin aata hai ✅"
+    )
+    return text, _post_rows(("bot",), "💰 Kamai shuru karo")
+
+
+async def post_chance():
+    text = (
+        "🎟 <b>Chance (ticket) kya hai?</b>\n\n"
+        "Giveaway me winner <b>random</b> chuna jata hai.\n"
+        "Jiske paas <b>zyada 🎟 chance</b>, uska naam aane ke <b>zyada mauke</b>.\n\n"
+        "<b>Chance kaise badhayein:</b>\n"
+        "• Entry karo (1 chance)\n"
+        "• Dost bulao — har pakke dost par +1\n"
+        "• Roz Daily Bonus lo, streak milestone par extra\n\n"
+        "Entry free hai, bas bot me code bhejna hai 🔑"
+    )
+    return text, _post_rows(("entry",), "🔑 Entry karo")
+
+
+async def post_winners():
+    total = await winners.count_documents({})
+    if not total:
+        return None
+    docs = [d async for d in winners.find({}).sort("declared_at", -1).limit(3)]
+    paid_p, paid_n = await paid_stats()
+    lines = "\n".join(f"🏆 {esc(mask_name(d.get('name')))} — Giveaway #{d.get('giveaway_no', '?')}" for d in docs)
+    text = (
+        "🎉 <b>Ye log jeet chuke hain!</b>\n\n"
+        f"Ab tak <b>{total}</b> giveaway ke winners:\n{lines}\n"
+        + (f"\n💸 Ab tak <b>{rs(paid_p)}</b> ({paid_n} payments) users ko mil chuke hain\n" if paid_p else "")
+        + "\nAgla naam aapka ho sakta hai — entry free hai 🔑"
+    )
+    return text, _post_rows(("entry",), "🔑 Entry karo")
 
 
 async def post_earners():
@@ -3822,26 +3895,32 @@ async def post_earners():
     paid_p, paid_n = await paid_stats()
     tops = "\n".join(f"{_medal(i)} {esc(mask_name(u.get('name')))} — <b>{rs(u.get('earned_p', 0))}</b>" for i, u in enumerate(top))
     text = (
-        "💰 <b>Sabse zyada kamai</b>\n\n" + tops + "\n\n"
+        "💰 <b>Sabse zyada kamai (is bot par)</b>\n\n" + tops + "\n\n"
         + (f"💸 Total paid: <b>{rs(paid_p)}</b> ({paid_n} payments)\n" if paid_p else "")
         + "Refer, streak cards aur weekly leaderboard — teeno se kamai hoti hai. Aap bhi shuru karo 👇"
     )
-    return text, _post_rows()
+    return text, _post_rows(("bot",), "💰 Kamai shuru karo")
 
 
 async def post_about():
+    n = await bot_numbers()
     text = (
         f"🎁 <b>{BOT_NAME}</b>\n\n"
+        f"👥 <b>{n['users']}</b> log juda chuke hain\n\n"
         "✅ Free Google Play codes ke giveaway aur drops\n"
         "🔥 Daily bonus aur streak cards\n"
         "👥 Refer karo, paise kamao\n"
         "🏆 Weekly leaderboard prizes\n\n"
         "100% free. OTP / password kabhi nahi. Har winner aur payment ka proof yahin aata hai ✅"
     )
-    return text, _post_rows()
+    return text, _post_rows(("bot",))
 
 
-AUTOPOST_TOPICS = [post_giveaway, post_leaderboard, post_streak, post_refer, post_drop, post_earners, post_about]
+# Har 12 ghante me ek alag topic — saare topics ghoomte rehte hain (khaali wale apne aap skip)
+AUTOPOST_TOPICS = [
+    post_giveaway, post_howto, post_leaderboard, post_drop, post_earn_ways, post_streak, post_winners,
+    post_refer, post_drop_info, post_chance, post_earners, post_about,
+]
 
 
 async def autopost_cfg() -> dict:
@@ -5021,6 +5100,7 @@ async def cb_about(cb: CallbackQuery):
             [btn("👤 " + sc("contact") + f" {SUPPORT_USERNAME}", url=SUPPORT_LINK)],
             [btn("📢 " + sc("channel"), url=TASK_CHANNEL_LINK), btn("👥 " + sc("group"), url=GROUP_LINK)],
             [btn("🏆 " + sc("pichhle winners"), "winners"), btn("📋 " + sc("rules & faq"), "faq")],
+            *bot_video_row(),
             [btn("⬅️ " + sc("back"), "menu")],
         ),
     )
@@ -5821,12 +5901,6 @@ def render_done(drop: dict, wall: list, reason: str) -> str:
     )
 
 
-def drop_video_row() -> list:
-    """Drop video link set ho to ek button row, warna kuch nahi."""
-    u = (LINKS.get("drop_video") or "").strip()
-    return [[btn("▶️ Drop kaise lein? Video dekho", url=u)]] if u.startswith(("http://", "https://")) else []
-
-
 def teaser_kb(no: int) -> InlineKeyboardMarkup:
     return kb([btn("🔔 Remind Me", f"drop:remind:{no}")], [btn("📱 Open App", url=app_link())], *drop_video_row())
 
@@ -6218,7 +6292,7 @@ async def after_claim(uid: int, name: Optional[str], no: int, rank: int, ms: int
             f"🏅 Rank: <b>#{rank}</b>   ⚡ {sec_text(ms)}\n\n"
             f"🎁 Aapka Redeem Code:\n<code>{esc(code)}</code>\n\n"
             "👆 Tap karke copy karein aur <b>turant Google Play Store me redeem</b> karein!",
-            reply_markup=kb([btn("📱 Open App", web_app=WEBSITE_URL)]),
+            reply_markup=kb([btn("📱 Open App", web_app=WEBSITE_URL)], *drop_video_row()),
         ),
     )
     await safe_log(
