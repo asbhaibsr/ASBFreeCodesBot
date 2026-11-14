@@ -12,10 +12,15 @@ v2.1: multi-platform links, winner date/time, edit + repost giveaway, multi-winn
 v3  : wallet (refer = Rs 0.20), invite code (= Telegram ID), withdraw (UPI/bank/mobile) with
       user confirm, weekly leaderboard prizes, small-caps menu, new-user log (batched),
       blocked-winner auto replacement, result post with participants (quote style).
+v4  : paise ka ledger (har credit/debit ka record), invite-code anti-fraud (48h, attempts limit,
+      confirm), refer 3 din baad pakka (pending), refer tracker, multi-admin withdraw, proof post,
+      FAQ + problem report, simple Hinglish messages, welcome image + video links (admin se set),
+      Mini App 5 tab me, admin: /balance /adjust /refs /dash.
 """
 
 import asyncio
 import html
+import inspect
 import logging
 import os
 import random
@@ -40,6 +45,7 @@ from aiogram.exceptions import (
 from aiogram.filters import Command, CommandObject, CommandStart
 from aiogram.types import (
     CallbackQuery,
+    ChatMemberUpdated,
     ErrorEvent,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -50,11 +56,11 @@ from aiogram.types import (
 )
 from aiogram.methods import AnswerCallbackQuery, CopyMessage, EditMessageText, SendMessage
 from pymongo import AsyncMongoClient, ReturnDocument
-from pymongo.errors import DuplicateKeyError
+from pymongo.errors import ConfigurationError, DuplicateKeyError, OperationFailure
 
 import site_app
 from site_app import (
-    disp_name, fmt_when, gw_links, link_label, link_text, mask_name, short_name,
+    disp_name, fmt_when, friend_rows, gw_links, link_label, link_text, mask_name, ref_pending, short_name,
     week_end_dt, week_key, week_start_ist,
 )
 
@@ -129,6 +135,37 @@ RESULT_MAX_NAMES = int(os.getenv("RESULT_MAX_NAMES", "300"))                    
 RESULT_STORE_NAMES = int(os.getenv("RESULT_STORE_NAMES", "1500"))                     # DB me max participant naam
 REPLACE_TRIES = int(os.getenv("REPLACE_TRIES", "8"))                                  # blocked winner ke badle max naye try
 
+# ---- v4: ledger / anti-fraud / trust
+def _id_set(text: str) -> set:
+    out = set()
+    for x in re.split(r"[,\s]+", text or ""):
+        x = x.strip()
+        if x.lstrip("-").isdigit():
+            out.add(int(x))
+    return out
+
+
+STAFF = {ADMIN_ID} | _id_set(os.getenv("ADMINS", ""))                               # sab admin (withdraw / wallet kaam)
+INVITE_MAX_AGE_HOURS = float(os.getenv("INVITE_MAX_AGE_HOURS", "48"))                # invite code sirf itne ghante tak naye user
+INVITE_MAX_WRONG = int(os.getenv("INVITE_MAX_WRONG", "5"))                           # ek din me max galat invite code
+INVITE_BLOCK_HOURS = float(os.getenv("INVITE_BLOCK_HOURS", "24"))                    # limit ke baad block
+REF_MATURE_DAYS = float(os.getenv("REF_MATURE_DAYS", "3"))                           # dost itne din channel me rahe tab refer pakka
+REF_BURST_COUNT = int(os.getenv("REF_BURST_COUNT", "8"))                             # itne refers ...
+REF_BURST_WINDOW_MIN = int(os.getenv("REF_BURST_WINDOW_MIN", "10"))                  # ... itne minute me = fraud flag
+REF_NUDGE_HOURS = float(os.getenv("REF_NUDGE_HOURS", "24"))                          # adhoora dost ko yaad dilana
+PROOF_CHANNEL_ID = int(os.getenv("PROOF_CHANNEL_ID", "0") or 0) or TASK_CHANNEL_ID   # payment proof yahan post hoga
+WD_ETA_TEXT = os.getenv("WD_ETA_TEXT", "24-48 ghante")
+REPORT_PER_HOUR = int(os.getenv("REPORT_PER_HOUR", "3"))                             # problem report limit
+AUTOPOST_HOURS = float(os.getenv("AUTOPOST_HOURS", "12"))                            # channel par auto post har itne ghante
+AUTOPOST_DEFAULT_ON = os.getenv("AUTOPOST", "true").strip().lower() not in ("0", "false", "off", "no")
+AUTOPOST_DELETE_OLD = os.getenv("AUTOPOST_DELETE_OLD", "true").strip().lower() not in ("0", "false", "off", "no")
+# Image / video links: admin bot se set karta hai (config me save), warna ye env default
+LINKS = {
+    "welcome_image": os.getenv("WELCOME_IMAGE", "").strip(),
+    "entry_video": os.getenv("ENTRY_VIDEO_URL", "").strip(),
+    "drop_video": os.getenv("DROP_VIDEO_URL", "").strip(),
+}
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
@@ -153,6 +190,7 @@ site_ctx = {
     "notice": NOTICE,
     "reward_cfg": REWARD_CFG,
     "hooks": {},
+    "links": LINKS,
     "db": {},
     "actions": {},
     "bot_token": BOT_TOKEN,
@@ -168,6 +206,8 @@ site_ctx = {
         "lb_min_refs": LB_MIN_REFS,
         "min_withdraw_p": MIN_WITHDRAW_PAISE,
         "ref_reward_p": REF_REWARD_PAISE,
+        "ref_mature_days": REF_MATURE_DAYS,
+        "wd_eta": WD_ETA_TEXT,
         "result_names": 200,
     },
 }
@@ -179,6 +219,7 @@ bot: Bot = None  # type: ignore
 mongo: AsyncMongoClient = None  # type: ignore
 users = entries = states = config = winners = sponsors = sponsor_joins = None
 drops = drop_codes = drop_claims = rewards = withdrawals = None
+ledger = referrals = None
 drop_tasks: dict = {}
 
 router = Router()
@@ -249,7 +290,13 @@ def full_name(u: User) -> str:
 
 
 def is_admin(uid: int) -> bool:
+    """Owner panel (giveaway, broadcast, drops...) sirf main ADMIN_ID ke liye."""
     return uid == ADMIN_ID
+
+
+def is_staff(uid: int) -> bool:
+    """Withdraw / wallet / refers ke kaam sab admins (ADMINS env) kar sakte hain."""
+    return uid in STAFF
 
 
 def spawn(coro) -> None:
@@ -341,10 +388,10 @@ def main_menu_kb(verified: bool = True) -> InlineKeyboardMarkup:
     if not verified:
         rows.append([btn("🛡 " + sc("verify karo (1 tap)"), "verify")])
     rows += [
-        [btn("🔑 " + sc("enter code"), "enter_code")],
-        [btn("❓ " + sc("help"), "help"), btn("📢 " + sc("channel join"), url=TASK_CHANNEL_LINK)],
-        [btn("💰 " + sc("refer & earn"), "refer"), btn("ℹ️ " + sc("about"), "about")],
-        [btn("📱 " + sc("open mini app"), web_app=WEBSITE_URL)],
+        [btn("🔑 " + sc("code daalo"), "enter_code")],
+        [btn("💰 " + sc("paise kamao"), "refer"), btn("📱 " + sc("app kholo"), web_app=WEBSITE_URL)],
+        [btn("📢 " + sc("channel"), url=TASK_CHANNEL_LINK), btn("❓ " + sc("madad"), "help")],
+        [btn("ℹ️ " + sc("about"), "about")],
     ]
     return kb(*rows)
 
@@ -372,7 +419,7 @@ def back_kb() -> InlineKeyboardMarkup:
 
 def admin_kb() -> InlineKeyboardMarkup:
     return kb(
-        [btn("📊 Stats", "adm:stats")],
+        [btn("📊 Stats", "adm:stats"), btn("📅 Aaj ka Dashboard", "adm:dash")],
         [btn("➕ Add Giveaway Code", "adm:add")],
         [btn("✏️ Edit Giveaway", "adm:edit"), btn("📣 Repost", "adm:repost")],
         [btn("🏆 Select Winner", "adm:winner")],
@@ -396,66 +443,67 @@ ADMIN_HOME_TEXT = "👑 <b>Admin Panel</b>\n\nKya karna chahte hain? 👇"
 
 
 # ---------------------------------------------------------------- texts
+def video_line(kind: str = "entry_video", label: str = "Entry kaise karein? Yahan click karke video dekho") -> str:
+    """Video link chhupa hua (link text me). Link set nahi hai to kuch nahi dikhega."""
+    u = (LINKS.get(kind) or "").strip()
+    if not u.startswith(("http://", "https://")):
+        return ""
+    return f'\n\n▶️ <a href="{esc(u)}">{esc(label)}</a>'
+
+
 def welcome_text(name: str) -> str:
     return (
-        f"🎁 <b>{sc('asb freecodes bot')}</b> 🎁\n"
-        "━━━━━━━━━━━━━━━━━━\n"
-        f"👋 Hey <b>{esc(name)}</b>! Swagat hai 🤗\n\n"
-        "🔥 Yahan milte hain <b>FREE Google Play redeem codes</b> — bilkul free, koi paise nahi!\n\n"
+        f"🎁 <b>{sc('asb freecodes')}</b>\n\n"
+        f"Namaste <b>{esc(name)}</b> 👋\n"
+        "Yahan roz <b>FREE Google Play codes</b> milte hain ✅\n\n"
         "<blockquote>"
-        "1️⃣ Video / post me chhupa <b>code</b> dhundo\n"
-        "2️⃣ <b>Enter Code</b> dabao aur code bhejo\n"
-        "3️⃣ Winner ko redeem code seedha DM me 🏆"
+        "1️⃣ Channel se <b>code</b> dhundo 🔍\n"
+        "2️⃣ <b>Code daalo</b> dabao\n"
+        "3️⃣ Winner ko code <b>DM</b> me milta hai 🏆"
         "</blockquote>\n\n"
-        f"💰 <b>Refer &amp; Earn:</b> har dost = <b>{rs(REF_REWARD_PAISE)}</b>\n"
-        f"🏅 Weekly top 3 ko extra <b>{prizes_line()}</b>\n\n"
-        "🔒 <i>OTP, password ya card detail hum kabhi nahi maangte.</i>\n"
-        "━━━━━━━━━━━━━━━━━━\n"
+        "🔒 <i>OTP ya password hum kabhi nahi maangte.</i>"
+        f"{video_line()}\n\n"
         "👇 <b>Neeche se shuru karo</b>"
     )
 
 
 def help_text() -> str:
     return (
-        "❓ <b>Chalo, 1 minute me samjhata hu</b>\n\n"
+        "❓ <b>Madad</b>\n\n"
+        "<b>Entry kaise karein?</b>\n"
         "<blockquote>"
-        "1️⃣ <b>Verify</b> karo (1 tap, bas bots rokne ke liye)\n"
-        "2️⃣ Channel <b>join</b> karo\n"
-        "3️⃣ Video / post me bataye jagah se <b>code</b> dhundo\n"
-        "4️⃣ <b>Enter Code</b> dabake code bhejo — entry confirm ✅\n"
-        "5️⃣ Winner ko redeem code seedha <b>DM</b> me milta hai 🏆"
+        "1️⃣ 🛡 Verify karo (1 tap)\n"
+        "2️⃣ 📢 Channel join karo\n"
+        "3️⃣ 🔍 Video / post me chhupa code dhundo\n"
+        "4️⃣ 🔑 Code bhejo — entry pakki ✅"
         "</blockquote>\n\n"
-        "💰 <b>Kamai kaise?</b>\n"
-        f"• Dost ko apna <b>Invite Code</b> do. Wo code daale to aapko <b>{rs(REF_REWARD_PAISE)}</b> + 1 ticket\n"
-        f"• Weekly leaderboard: top 3 ko <b>{prizes_line()}</b> ({LB_MIN_REFS}+ refers chahiye)\n"
-        "• Reward Cards poore karo, paisa seedha balance me\n"
-        f"• Balance <b>{rs(MIN_WITHDRAW_PAISE)}</b> hote hi UPI / bank / mobile par withdraw\n\n"
-        "🔥 <b>Daily Bonus</b> se roz extra tickets milte hain (Mini App me).\n\n"
-        "⚠️ <b>Dhyan rakhna:</b>\n"
-        f"• {MAX_WRONG_ATTEMPTS} se zyada galat code = <b>{LOCK_HOURS} ghante</b> ka lock\n"
-        "• Ek giveaway me <b>ek hi entry</b> hoti hai\n\n"
-        f"🆘 Koi dikkat? {esc(SUPPORT_USERNAME)} se baat karo."
+        "<b>🎟 Chance kya hai?</b>\n"
+        "Winner <b>random</b> chuna jata hai. Jiske paas zyada 🎟 chance, uska naam aane ke mauke zyada.\n"
+        "Chance badhao: dost ko bulao, roz Daily Bonus lo.\n\n"
+        f"⚠️ {MAX_WRONG_ATTEMPTS} galat code = {LOCK_HOURS} ghante ka lock. Ek giveaway me ek hi entry.\n\n"
+        f"🆘 Dikkat? {esc(SUPPORT_USERNAME)}"
+        f"{video_line()}"
     )
 
 
 def entry_confirmed_text(
     admin_msg: Optional[str], tickets: int = 1, entry_no: Optional[int] = None, winner_at: Optional[datetime] = None
 ) -> str:
-    lines = ["🎉 <b>Badhai ho! Entry confirm ho gayi</b> ✅", ""]
+    lines = ["🎉 <b>Entry pakki!</b> ✅", ""]
     if entry_no:
         lines.append(f"🔢 Entry No: <b>#{entry_no}</b>")
-    lines.append(f"🎟 Aapke tickets: <b>{tickets}</b>")
+    lines.append(f"🎟 Aapke chance: <b>{tickets}</b>")
     if winner_at:
         lines.append(f"⏰ Winner: <b>{esc(fmt_when(winner_at))}</b>")
     lines += [
         "",
-        "Ab bas <b>intezaar</b> karo, aur kuch nahi karna 😊",
-        "Winner ko code seedha <b>DM</b> me milega, aur result channel par aayega:",
+        "Ab bas <b>intezaar</b> karo 😊",
+        "Winner ko code <b>DM</b> me milega. Result channel par aayega:",
         f"📢 {TASK_CHANNEL_LINK}",
         "",
-        "💡 Jeetne ka chance badhana hai? Dost ko <b>Invite Code</b> do — har dost = +1 ticket.",
+        "💡 <i>Zyada 🎟 chance = jeetne ke zyada mauke. Dost ko bulao, chance badhao.</i>",
     ]
-    base = "\n".join(lines)
+    base = "\n".join(lines) + video_line()
     if admin_msg:
         base += "\n\n━━━━━━━━━━━━━━\n📩 <b>Admin ka message:</b>\n\n" + admin_msg
     return base
@@ -495,7 +543,7 @@ def non_winner_text(winner_label: str, n: int = 1) -> str:
 # ======================================================================
 async def init_db() -> None:
     global mongo, users, entries, states, config, winners, sponsors, sponsor_joins
-    global drops, drop_codes, drop_claims, rewards, withdrawals
+    global drops, drop_codes, drop_claims, rewards, withdrawals, ledger, referrals
     mongo = AsyncMongoClient(
         MONGO_URI, tz_aware=True, serverSelectionTimeoutMS=8000, connectTimeoutMS=8000, socketTimeoutMS=15000,
         maxPoolSize=int(os.getenv("MONGO_POOL", "30")), minPoolSize=0, maxIdleTimeMS=60000, appName="asb-bot",
@@ -508,6 +556,7 @@ async def init_db() -> None:
     drops, drop_codes, drop_claims = db["drops"], db["drop_codes"], db["drop_claims"]
     rewards = db["rewards"]
     withdrawals = db["withdrawals"]
+    ledger, referrals = db["ledger"], db["referrals"]
     await states.create_index("expires_at", expireAfterSeconds=0)  # TTL auto-clean
     await users.create_index("junk")
     await users.create_index([("ref_count", -1)])
@@ -520,7 +569,15 @@ async def init_db() -> None:
     await users.create_index("streak")
     await withdrawals.create_index([("status", 1), ("created_at", 1)])
     await withdrawals.create_index([("uid", 1), ("created_at", -1)])
+    await ledger.create_index([("uid", 1), ("at", -1)])
+    await referrals.create_index([("ref", 1), ("qualified_at", -1)])
+    await referrals.create_index([("status", 1), ("mature_at", 1)])
+    await users.create_index("ref_by")
     await ensure_week_index(week_key())
+    lk = await config.find_one({"_id": "links"})
+    for k in LINKS:
+        if lk and k in lk:
+            LINKS[k] = lk[k] or ""
     cfg = await config.find_one({"_id": "reward_cfg"})
     for k in ("streak", "refer"):
         if cfg and cfg.get(k):
@@ -530,6 +587,7 @@ async def init_db() -> None:
     site_ctx["db"].update(
         users=users, entries=entries, config=config, winners=winners, sponsors=sponsors,
         drops=drops, drop_claims=drop_claims, rewards=rewards, withdrawals=withdrawals,
+        ledger=ledger, referrals=referrals,
     )
     logger.info("MongoDB connected ✅  (db=%s)", DB_NAME)
 
@@ -789,7 +847,8 @@ async def safe_log(text: str) -> None:
 
 
 async def notify_admin(text: str, markup: Optional[InlineKeyboardMarkup] = None) -> None:
-    await deliver(ADMIN_ID, lambda cid: bot.send_message(cid, text, reply_markup=markup))
+    for aid in sorted(STAFF):
+        await deliver(aid, lambda cid: bot.send_message(cid, text, reply_markup=markup))
 
 
 async def safe_edit(cb: CallbackQuery, text: str, markup: Optional[InlineKeyboardMarkup] = None) -> None:
@@ -822,10 +881,11 @@ async def alert_admin(key: str, text: str, cooldown: Optional[float] = None) -> 
     extra = _alert_skipped.pop(key, 0)
     if extra:
         text += f"\n\n(+{extra} baar aur hua is dauran)"
-    try:
-        await bot.send_message(ADMIN_ID, text)
-    except Exception as e:  # alert fail hone se kuch nahi rukna chahiye
-        logger.warning("alert_admin fail: %s", e)
+    for aid in sorted(STAFF):
+        try:
+            await bot.send_message(aid, text)
+        except Exception as e:  # alert fail hone se kuch nahi rukna chahiye
+            logger.warning("alert_admin fail: %s", e)
 
 
 def note_flood(seconds: int) -> None:
@@ -877,7 +937,7 @@ class LoadGuard(BaseMiddleware):
     async def __call__(self, handler, event, data):
         metrics["updates"] += 1
         user = self._user(event)
-        if user and user.id != ADMIN_ID:
+        if user and user.id not in STAFF:
             now = time.monotonic()
             if now - self.last.get(user.id, -1e9) < USER_THROTTLE_SEC:
                 return None  # button-mashing / spam ignore
@@ -1040,11 +1100,193 @@ async def send_captcha(uid: int, cb: Optional[CallbackQuery] = None, note: str =
         await bot.send_message(uid, text, reply_markup=markup)
 
 
-_ref_burst: dict = {}
+# ======================================================================
+#  v4: PAISE KA LEDGER  (har credit / debit ka record — atomic)
+# ======================================================================
+LEDGER_LABEL = {
+    "refer": "Dost ka refer",
+    "leaderboard": "Weekly leaderboard",
+    "card": "Reward card",
+    "withdraw": "Withdraw",
+    "refund": "Paisa wapas",
+    "admin_adjust": "Admin ne badla",
+    "clawback": "Refer cancel",
+    "opening": "Purana balance",
+}
+_TXN = {"ok": True}
 
 
+class _WalletAbort(Exception):
+    def __init__(self, reason: str):
+        super().__init__(reason)
+        self.reason = reason
+
+
+async def _run_txn(fn):
+    """fn(session) ko ek MongoDB transaction me chalao. Transaction na chale to bina session (fn(None))."""
+    if not _TXN["ok"] or mongo is None:
+        return await fn(None)
+    try:
+        sess = mongo.start_session()
+        if inspect.isawaitable(sess):
+            sess = await sess
+        async with sess as s:
+            return await s.with_transaction(fn)
+    except _WalletAbort:
+        raise
+    except (TypeError, AttributeError, NotImplementedError, ConfigurationError) as e:
+        _TXN["ok"] = False
+        logger.warning("Mongo transaction use nahi ho paya, bina transaction chalega: %s", e)
+        return await fn(None)
+    except OperationFailure as e:
+        if e.code in (20, 263) or "ransaction" in str(e):
+            _TXN["ok"] = False
+            logger.warning("Mongo transaction support nahi: %s — bina transaction chalega", e)
+            return await fn(None)
+        raise
+
+
+async def wallet_apply(
+    uid: int,
+    delta_p: int,
+    typ: str,
+    ref: Optional[str] = None,
+    note: str = "",
+    earned_delta: Optional[int] = None,
+    extra_inc: Optional[dict] = None,
+    extra_set: Optional[dict] = None,
+    by: Optional[int] = None,
+) -> dict:
+    """Balance badalne ka EKLAUTA raasta. Balance + ledger entry ek saath (transaction).
+    delta_p > 0 = credit, < 0 = debit (balance kam ho to fail). `ref` same ho to dobara apply nahi hota.
+    Return: {"ok": True, "balance_p", "before_p", "entry_id", "user"} ya {"ok": False, "reason": dup/low/nouser/zero}"""
+    delta_p = int(delta_p)
+    if delta_p == 0:
+        return {"ok": False, "reason": "zero"}
+    now = now_utc()
+    eid = f"{typ}:{ref}" if ref else f"{typ}:{uid}:{int(time.time() * 1000)}:{random.randint(1000, 9999)}"
+    if earned_delta is None:
+        earned_delta = delta_p if (delta_p > 0 and typ in ("refer", "leaderboard", "card")) else 0
+    inc = {"balance_p": delta_p}
+    if earned_delta:
+        inc["earned_p"] = int(earned_delta)
+    for k, v in (extra_inc or {}).items():
+        inc[k] = inc.get(k, 0) + v
+    flt: dict = {"_id": uid}
+    if delta_p < 0:
+        flt["balance_p"] = {"$gte": -delta_p}
+    upd: dict = {"$inc": inc}
+    if extra_set:
+        upd["$set"] = dict(extra_set)
+    row = {
+        "_id": eid, "uid": uid, "amount_p": delta_p, "type": typ, "ref": str(ref) if ref else None,
+        "note": (note or "")[:120], "by": by, "at": now, "balance_after": None,
+    }
+    fail_reason = "low" if delta_p < 0 else "nouser"
+
+    async def body(session):
+        kw = {"session": session} if session is not None else {}
+        if await ledger.find_one({"_id": eid}, {"_id": 1}, **kw):
+            return {"ok": False, "reason": "dup"}
+        try:
+            await ledger.insert_one(dict(row), **kw)
+        except DuplicateKeyError:
+            return {"ok": False, "reason": "dup"}
+        after = await users.find_one_and_update(flt, upd, return_document=ReturnDocument.AFTER, **kw)
+        if not after:
+            if session is not None:
+                raise _WalletAbort(fail_reason)  # transaction abort = ledger entry bhi wapas
+            await ledger.delete_one({"_id": eid})
+            return {"ok": False, "reason": fail_reason}
+        bal = int(after.get("balance_p", 0))
+        await ledger.update_one({"_id": eid}, {"$set": {"balance_after": bal}}, **kw)
+        return {"ok": True, "balance_p": bal, "before_p": bal - delta_p, "entry_id": eid, "user": after}
+
+    try:
+        res = await _run_txn(body)
+    except _WalletAbort as e:
+        return {"ok": False, "reason": e.reason}
+    if res.get("ok"):
+        site_invalidate(uid)
+        invalidate_user(uid)
+        if delta_p > 0 and res["before_p"] < MIN_WITHDRAW_PAISE <= res["balance_p"]:
+            spawn(notify_min_reached(uid, res["balance_p"]))
+    return res
+
+
+async def notify_min_reached(uid: int, bal: int) -> None:
+    await deliver(
+        uid,
+        lambda cid: bot.send_message(
+            cid,
+            f"🎉 <b>Balance {rs(bal)} ho gaya!</b>\nAb aap withdraw kar sakte ho 💸",
+            reply_markup=kb([btn("💸 " + sc("withdraw"), "w:start")]),
+        ),
+    )
+
+
+async def ledger_recent(uid: int, n: int = 20) -> list:
+    return [d async for d in ledger.find({"uid": uid}).sort("at", -1).limit(n)]
+
+
+async def ledger_sum(uid: int) -> int:
+    cur = await ledger.aggregate([{"$match": {"uid": uid}}, {"$group": {"_id": None, "t": {"$sum": "$amount_p"}}}])
+    rows = [d async for d in cur]
+    return int(rows[0]["t"]) if rows else 0
+
+
+async def ledger_opening_once() -> int:
+    """v4 se pehle ke balance ke liye ek 'opening' entry (sirf ek baar)."""
+    if await config.find_one({"_id": "ledger_opening"}):
+        return 0
+    n = 0
+    async for u in users.find({"balance_p": {"$gt": 0}}, {"balance_p": 1}):
+        bal = int(u.get("balance_p", 0))
+        try:
+            await ledger.insert_one({
+                "_id": f"opening:{u['_id']}", "uid": u["_id"], "amount_p": bal, "type": "opening", "ref": None,
+                "note": "v4 se pehle ka balance", "by": None, "at": now_utc(), "balance_after": bal,
+            })
+            n += 1
+        except DuplicateKeyError:
+            pass
+    await config.update_one({"_id": "ledger_opening"}, {"$set": {"at": now_utc(), "n": n}}, upsert=True)
+    logger.info("Ledger opening entries: %s", n)
+    return n
+
+
+def ledger_line(e: dict) -> str:
+    amt = int(e.get("amount_p", 0))
+    sign = "➕" if amt > 0 else "➖"
+    label = LEDGER_LABEL.get(e.get("type"), e.get("type") or "")
+    note = f" · {esc(e['note'])}" if e.get("note") and e.get("type") in ("admin_adjust", "clawback") else ""
+    at = e.get("at")
+    when = at.astimezone(IST).strftime("%d %b") if at else ""
+    return f"{sign} <b>{rs(abs(amt))}</b> · {esc(label)}{note} · {when}"
+
+
+_paid_cache = {"t": -1e9, "v": (0, 0)}
+
+
+async def paid_stats() -> tuple:
+    """(total paid paise, payments count) — 60 sec cache."""
+    if time.monotonic() - _paid_cache["t"] < 60:
+        return _paid_cache["v"]
+    cur = await withdrawals.aggregate([
+        {"$match": {"status": {"$in": ["paid", "confirmed"]}}},
+        {"$group": {"_id": None, "p": {"$sum": "$amount_p"}, "n": {"$sum": 1}}},
+    ])
+    rows = [d async for d in cur]
+    v = (int(rows[0]["p"]), int(rows[0]["n"])) if rows else (0, 0)
+    _paid_cache.update(t=time.monotonic(), v=v)
+    return v
+
+
+# ======================================================================
+#  v4: REFER  (verify + channel join -> PENDING, REF_MATURE_DAYS baad PAKKA)
+# ======================================================================
 async def credit_referral(uid: int) -> None:
-    """Verified + channel-join hote hi referrer ko paisa + ticket + reward-card progress (sirf ek baar)."""
+    """Dost verify + channel join kar chuka: refer 'pending' me jata hai (paisa abhi nahi)."""
     doc = await users.find_one_and_update(
         {"_id": uid, "ref_by": {"$ne": None}, "ref_credited": {"$ne": True}},
         {"$set": {"ref_credited": True}},
@@ -1052,52 +1294,136 @@ async def credit_referral(uid: int) -> None:
     if not doc:
         return
     ref = doc["ref_by"]
+    now = now_utc()
+    await referrals.update_one(
+        {"_id": uid},
+        {
+            "$set": {
+                "ref": ref, "friend": uid, "name": doc.get("name"), "status": "pending",
+                "qualified_at": now, "mature_at": now + timedelta(days=REF_MATURE_DAYS),
+            },
+            "$setOnInsert": {"created_at": doc.get("ref_at") or now},
+        },
+        upsert=True,
+    )
+    # ek saath bahut refers = fraud flag + admin alert
+    recent = await referrals.count_documents(
+        {"ref": ref, "qualified_at": {"$gte": now - timedelta(minutes=REF_BURST_WINDOW_MIN)}}
+    )
+    if recent >= REF_BURST_COUNT:
+        ru0 = await users.find_one_and_update({"_id": ref}, {"$set": {"ref_flag": True}}) or {}
+        spawn(alert_admin(
+            f"refburst:{ref}",
+            f"⚠️ <b>Referral burst</b>: {mention(ref, ru0.get('name'))} (<code>{ref}</code>) ke "
+            f"{REF_BURST_WINDOW_MIN} min me {recent} referrals!\n"
+            f"Paisa roka gaya hai. Check: <code>/refs {ref}</code>",
+            cooldown=1800,
+        ))
+    ru = await users.find_one({"_id": ref}, {"banned": 1})
+    if ru and not ru.get("banned"):
+        days = f"{REF_MATURE_DAYS:g}"
+        await deliver(
+            ref,
+            lambda cid: bot.send_message(
+                cid,
+                f"👋 <b>{esc(disp_name(doc.get('name'), 28))}</b> aapke invite se aaya aur verify ho gaya!\n\n"
+                f"⏳ Wo <b>{days} din</b> channel me rahe to aapka <b>{rs(REF_REWARD_PAISE)}</b> pakka ho jayega.",
+                reply_markup=kb([btn("👥 " + sc("mere dost"), "friends")]),
+            ),
+        )
+    if REF_MATURE_DAYS <= 0:
+        await settle_referral(uid)
+
+
+async def settle_referral(friend: int, force: bool = False) -> str:
+    """pending -> credited / cancelled / held / retry. Returns status text."""
+    now = now_utc()
+    r = await referrals.find_one_and_update(
+        {"_id": friend, "status": "pending"}, {"$set": {"status": "settling", "settle_at": now}}
+    )
+    if not r:
+        return "none"
+    ref = r["ref"]
+
+    async def back(status: str, **extra) -> None:
+        await referrals.update_one({"_id": friend}, {"$set": {"status": status, **extra}})
+
+    ru = await users.find_one({"_id": ref}, {"banned": 1, "ref_flag": 1, "name": 1})
+    fu = await users.find_one({"_id": friend}, {"banned": 1, "name": 1}) or {}
+    if not ru or ru.get("banned"):
+        await back("cancelled", cancel_reason="referrer_banned", cancelled_at=now)
+        return "cancelled"
+    if fu.get("banned"):
+        await back("cancelled", cancel_reason="friend_banned", cancelled_at=now)
+        return "cancelled"
+    if ru.get("ref_flag") and not force:
+        await back("held", held_at=now)
+        spawn(alert_admin(
+            f"refheld:{ref}",
+            f"⚠️ {mention(ref, ru.get('name'))} (<code>{ref}</code>) ka refer paisa <b>roka</b> hai (fraud flag).\n"
+            f"Check karein: <code>/refs {ref}</code>",
+            cooldown=3600,
+        ))
+        return "held"
+    if REFERRAL_REQUIRE_JOIN:
+        m = await is_member(TASK_CHANNEL_ID, friend)
+        if m is False:
+            await back("cancelled", cancel_reason="left", cancelled_at=now)
+            spawn(notify_ref_cancelled(ref, r.get("name")))
+            return "cancelled"
+        if m is None:
+            await back("pending", mature_at=now + timedelta(hours=1))
+            return "retry"
     wk = week_key()
     await ensure_week_index(wk)
-    ru = await users.find_one_and_update(
-        {"_id": ref, "banned": {"$ne": True}},
-        {
-            "$inc": {
-                "ref_count": 1,
-                "ref_cycle_count": 1,
-                "balance_p": REF_REWARD_PAISE,
-                "earned_p": REF_REWARD_PAISE,
-                f"wkc.{wk}": 1,
-            },
-            "$set": {f"wkt.{wk}": now_utc()},
-        },
-        return_document=ReturnDocument.AFTER,
-    )
-    if not ru:  # referrer ban / gayab — kuch credit nahi
-        return
-    cnt, cycle = int(ru.get("ref_cycle_count", 1)), int(ru.get("ref_cycle", 1))
+    counts = {"ref_count": 1, "ref_cycle_count": 1, f"wkc.{wk}": 1}
+    if REF_REWARD_PAISE > 0:
+        res = await wallet_apply(
+            ref, REF_REWARD_PAISE, "refer", ref=f"f{friend}", note=disp_name(r.get("name"), 20),
+            extra_inc=counts, extra_set={f"wkt.{wk}": now},
+        )
+        if not res["ok"]:
+            if res["reason"] == "dup":
+                await back("credited", credited_at=now, reward_p=REF_REWARD_PAISE, wk=wk)
+                return "credited"
+            await back("pending", mature_at=now + timedelta(hours=1))
+            return "retry"
+        ru2 = res["user"]
+    else:
+        ru2 = await users.find_one_and_update(
+            {"_id": ref}, {"$inc": counts, "$set": {f"wkt.{wk}": now}}, return_document=ReturnDocument.AFTER
+        )
+        res = {"balance_p": int((ru2 or {}).get("balance_p", 0))}
+    await back("credited", credited_at=now, reward_p=REF_REWARD_PAISE, wk=wk)
+    cnt, cycle = int(ru2.get("ref_cycle_count", 1)), int(ru2.get("ref_cycle", 1))
     card = await grant_card(ref, "refer", cycle, cnt)
     if card:
         spawn(notify_card_earned(ref, card))
     if cnt >= max(t for t, _ in REWARD_CFG["refer"]):  # cycle poora -> fresh start
         await users.update_one({"_id": ref}, {"$set": {"ref_cycle_count": 0, "ref_cycle": cycle + 1}})
-    dq = _ref_burst.setdefault(ref, deque(maxlen=20))
-    dq.append(time.monotonic())
-    recent = [t for t in dq if time.monotonic() - t < 600]
-    if len(recent) >= 8:  # fraud flag
-        await users.update_one({"_id": ref}, {"$set": {"ref_flag": True}})
-        spawn(alert_admin(
-            f"refburst:{ref}",
-            f"⚠️ <b>Referral burst</b>: {mention(ref, ru.get('name'))} (<code>{ref}</code>) ke 10 min me {len(recent)} referrals!\n"
-            f"Check karein. Ban: <code>/ban {ref}</code>",
-            cooldown=1800,
-        ))
     await add_tickets(ref, REFERRAL_TICKETS)
     site_invalidate(ref)
     await deliver(
         ref,
         lambda cid: bot.send_message(
             cid,
-            f"🎉 <b>{esc(disp_name(doc.get('name'), 28))}</b> aapke invite se aaya aur verify ho gaya!\n\n"
-            f"💰 <b>+{rs(REF_REWARD_PAISE)}</b> balance me add ho gaye\n"
-            f"🎟 <b>+{REFERRAL_TICKETS} ticket</b> bhi mila\n"
-            f"💼 Total balance: <b>{rs(ru.get('balance_p', 0))}</b>",
-            reply_markup=kb([btn("💰 " + sc("refer & earn"), "refer")]),
+            f"✅ <b>{esc(disp_name(r.get('name'), 28))}</b> ka refer <b>pakka</b> ho gaya!\n\n"
+            f"💰 <b>+{rs(REF_REWARD_PAISE)}</b> balance me add\n"
+            f"🎟 <b>+{REFERRAL_TICKETS} chance</b> bhi mila\n"
+            f"💼 Balance: <b>{rs(res.get('balance_p', 0))}</b>",
+            reply_markup=kb([btn("💰 " + sc("paise kamao"), "refer")]),
+        ),
+    )
+    return "credited"
+
+
+async def notify_ref_cancelled(ref: int, friend_name) -> None:
+    await deliver(
+        ref,
+        lambda cid: bot.send_message(
+            cid,
+            f"ℹ️ <b>{esc(disp_name(friend_name, 28))}</b> ne channel chhod diya, isliye ye refer cancel ho gaya.\n"
+            "Aapke balance se kuch nahi kata 🙂",
         ),
     )
 
@@ -1118,9 +1444,81 @@ async def maybe_credit_referral(uid: int) -> str:
     return "credited"
 
 
+@router.chat_member(F.chat.id == TASK_CHANNEL_ID)
+async def on_channel_member(ev: ChatMemberUpdated):
+    """Dost channel chhode to pending refer turant cancel."""
+    if ev.new_chat_member.status not in ("left", "kicked"):
+        return
+    uid = ev.new_chat_member.user.id
+    r = await referrals.find_one_and_update(
+        {"_id": uid, "status": {"$in": ["pending", "held"]}},
+        {"$set": {"status": "cancelled", "cancel_reason": "left", "cancelled_at": now_utc()}},
+    )
+    if r:
+        spawn(notify_ref_cancelled(r["ref"], r.get("name")))
+
+
+async def referral_watch_once() -> dict:
+    now = now_utc()
+    out = {"settled": 0, "nudged": 0}
+    # atka hua 'settling' wapas pending
+    await referrals.update_many(
+        {"status": "settling", "settle_at": {"$lte": now - timedelta(minutes=10)}}, {"$set": {"status": "pending"}}
+    )
+    due = [d["_id"] async for d in referrals.find({"status": "pending", "mature_at": {"$lte": now}}).limit(40)]
+    for fid in due:
+        if await settle_referral(fid) == "credited":
+            out["settled"] += 1
+    # adhoora dost ko ek baar yaad dilana
+    cutoff = now - timedelta(hours=REF_NUDGE_HOURS)
+    cur = users.find(
+        {"ref_by": {"$ne": None}, "ref_credited": {"$ne": True}, "ref_nudged": {"$ne": True},
+         "ref_at": {"$lte": cutoff}, "banned": {"$ne": True}, "junk": {"$ne": True}},
+        {"verified": 1},
+    ).limit(30)
+    for u in [d async for d in cur]:
+        got = await users.find_one_and_update({"_id": u["_id"], "ref_nudged": {"$ne": True}}, {"$set": {"ref_nudged": True}})
+        if not got:
+            continue
+        todo = "🛡 <b>Verify</b> karo (1 tap)" if not got.get("verified") else "📢 <b>Channel join</b> karo"
+        spawn(deliver(
+            u["_id"],
+            lambda cid, todo=todo: bot.send_message(
+                cid,
+                "👋 Aapne dost ka invite code lagaya tha, bas ek kaam baaki hai:\n\n"
+                f"{todo}\n\nPhir aapke dost ka refer pending me chala jayega 🙏",
+                reply_markup=kb([btn("🔑 " + sc("shuru karo"), "enter_code")], [btn("📢 " + sc("join channel"), url=TASK_CHANNEL_LINK)]),
+            ),
+        ))
+        out["nudged"] += 1
+    return out
+
+
+async def referral_watch_loop() -> None:
+    while True:
+        await asyncio.sleep(300)
+        try:
+            await referral_watch_once()
+        except Exception:
+            logger.exception("referral_watch_loop")
+
+
 # ======================================================================
 #  USER HANDLERS
 # ======================================================================
+async def send_welcome(m: Message, name: str, markup) -> None:
+    """Welcome message (image set ho to image ke saath; image na chale to sirf text)."""
+    text = welcome_text(name)
+    img = (LINKS.get("welcome_image") or "").strip()
+    if img:
+        try:
+            await m.answer_photo(img, caption=text, reply_markup=markup)
+            return
+        except TelegramAPIError as e:
+            logger.warning("Welcome image nahi gayi (%s) — text bhej raha hu", e)
+    await m.answer(text, reply_markup=markup)
+
+
 @router.message(CommandStart())
 async def cmd_start(m: Message, command: CommandObject):
     uid = m.from_user.id
@@ -1134,10 +1532,12 @@ async def cmd_start(m: Message, command: CommandObject):
         except ValueError:
             ref = 0
         if ref and ref != uid and await users.find_one({"_id": ref}, {"_id": 1}):
-            await users.update_one({"_id": uid}, {"$set": {"ref_by": ref}})
+            await users.update_one({"_id": uid}, {"$set": {"ref_by": ref, "ref_at": now_utc(), "ref_via": "link"}})
             invalidate_user(uid)
 
-    await m.answer(welcome_text(m.from_user.first_name), reply_markup=await user_menu(uid))
+    await send_welcome(m, m.from_user.first_name, await user_menu(uid))
+    if args == "report":
+        await start_report(uid)
     if args in ("drop", "app"):
         await m.answer(
             "⚡ <b>Free Code Drops</b> aur baaki sab features ke liye App kholein 👇",
@@ -1167,8 +1567,9 @@ async def cb_help(cb: CallbackQuery):
         cb,
         help_text(),
         kb(
-            [btn("🆘 Contact Support", url=SUPPORT_LINK)],
-            [btn("⬅️ Back", "menu")],
+            [btn("📋 " + sc("rules & faq"), "faq"), btn("🆘 " + sc("problem batao"), "report")],
+            [btn("👤 " + sc("support"), url=SUPPORT_LINK)],
+            [btn("⬅️ " + sc("back"), "menu")],
         ),
     )
 
@@ -1334,13 +1735,14 @@ async def enter_code_flow(user: User) -> None:
         return
 
     await set_state(uid, "await_code", ttl_min=10)
-    text = "🔑 <b>Apna code ab yahan bhejein</b> 👇\n\n<i>(Cancel karne ke liye /cancel)</i>"
+    text = "🔑 <b>Code yahan bhejo</b> 👇\n<i>Cancel: /cancel</i>"
     where = code_where_text(gw)
     if where:
         text += "\n\n" + where
     wt = when_line(gw)
     if wt:
         text += "\n\n" + wt
+    text += video_line()
     rows = code_links_rows(gw)
     await bot.send_message(uid, text, reply_markup=kb(*rows) if rows else None)
 
@@ -1542,12 +1944,12 @@ async def cb_daily(cb: CallbackQuery):
         return
     streak, best, reward, nxt = r["streak"], r["best"], r["reward"], r["next_day"]
     reward_line = (
-        f"🎉 Milestone! <b>+{reward} ticket</b> mil gaya 🎟"
+        f"🎉 Milestone! <b>+{reward} chance</b> mil gaya 🎟"
         if reward
-        else "Aaj ke liye ticket reward nahi — milestone ka wait karein 😊"
+        else "Aaj ke liye extra chance nahi — milestone ka wait karein 😊"
     )
     next_line = (
-        f"🎯 Agla reward: <b>{nxt} din</b> par (+{r['next_reward']} ticket) — {nxt - streak} din baaki"
+        f"🎯 Agla reward: <b>{nxt} din</b> par (+{r['next_reward']} chance) — {nxt - streak} din baaki"
         if nxt
         else "🏆 Aapne sabhi milestones paar kar liye!"
     )
@@ -1658,6 +2060,10 @@ async def cb_admin(cb: CallbackQuery):
         n_rw = await rewards.count_documents({"status": "requested"})
         n_wd = await withdrawals.count_documents({"status": "pending"})
         n_ban = await users.count_documents({"banned": True})
+        liab = await sum_field(users, {}, "balance_p")
+        pend_wd = await sum_field(withdrawals, {"status": "pending"}, "amount_p")
+        paid_p, paid_n = await paid_stats()
+        n_pref = await referrals.count_documents({"status": {"$in": ["pending", "settling", "held"]}})
         gw = await get_giveaway()
         if gw:
             status = "🔄 Winner process chal raha hai" if gw.get("closing") else "🟢 Active"
@@ -1679,12 +2085,18 @@ async def cb_admin(cb: CallbackQuery):
             f"🤝 Sponsors: <b>{n_sp}</b> (verified members: {n_sp_joins})\n"
             f"🏆 Winners Declared: <b>{n_winners}</b>\n"
             f"🎯 Reward requests pending: <b>{n_rw}</b>\n"
-            f"💸 Withdrawals pending: <b>{n_wd}</b>\n"
+            f"💸 Withdrawals pending: <b>{n_wd}</b> ({rs(pend_wd)})\n"
+            f"💼 Sabke balance ka total (dena hai): <b>{rs(liab)}</b>\n"
+            f"✅ Ab tak paid: <b>{rs(paid_p)}</b> ({paid_n})\n"
+            f"⏳ Pending refers: <b>{n_pref}</b>\n"
             f"🚫 Banned: <b>{n_ban}</b>\n"
             f"{'⚠️ Degraded mode ON' if STATUS['degraded'] else '🟢 Bot healthy'}\n\n"
             f"🎁 <b>Giveaway:</b> {gw_line}",
             admin_back_kb(),
         )
+
+    elif action == "dash":
+        await safe_edit(cb, await dash_text(), admin_back_kb())
 
     # ---------------------------------------------------------- add code
     elif action == "add":
@@ -2955,6 +3367,575 @@ async def handle_admin_state(m: Message, st: dict) -> None:
 # ======================================================================
 #  CATCH-ALL MESSAGE ROUTER  (state ke hisaab se)
 # ======================================================================
+# ======================================================================
+#  v4: ADMIN / STAFF COMMANDS  (/balance /adjust /refs /dash  +  owner: /setvideo /setdropvideo /setimage)
+# ======================================================================
+async def sum_field(coll, match: dict, field: str) -> int:
+    cur = await coll.aggregate([{"$match": match}, {"$group": {"_id": None, "t": {"$sum": f"${field}"}}}])
+    rows = [d async for d in cur]
+    return int(rows[0]["t"]) if rows else 0
+
+
+def today_start_utc() -> datetime:
+    return datetime.now(IST).replace(hour=0, minute=0, second=0, microsecond=0).astimezone(timezone.utc)
+
+
+async def dash_text() -> str:
+    t0 = today_start_utc()
+    new_users = await users.count_documents({"joined_at": {"$gte": t0}})
+    q_today = await referrals.count_documents({"qualified_at": {"$gte": t0}})
+    ok_today = await referrals.count_documents({"credited_at": {"$gte": t0}})
+    wd_req = await withdrawals.count_documents({"created_at": {"$gte": t0}})
+    paid_today_n = await withdrawals.count_documents({"paid_at": {"$gte": t0}})
+    paid_today_p = await sum_field(withdrawals, {"paid_at": {"$gte": t0}}, "amount_p")
+    paid_p, paid_n = await paid_stats()
+    liab = await sum_field(users, {}, "balance_p")
+    n_pw = await withdrawals.count_documents({"status": "pending"})
+    return (
+        f"📅 <b>Aaj ka Dashboard</b> <i>({datetime.now(IST).strftime('%d %b')})</i>\n\n"
+        f"👥 Naye users: <b>{new_users}</b>\n"
+        f"🤝 Naye refers (pending me gaye): <b>{q_today}</b>\n"
+        f"✅ Refers pakke hue: <b>{ok_today}</b>\n"
+        f"💸 Withdraw requests: <b>{wd_req}</b>  (abhi pending: {n_pw})\n"
+        f"✅ Aaj paid: <b>{paid_today_n}</b> · {rs(paid_today_p)}\n\n"
+        f"📊 Ab tak total paid: <b>{rs(paid_p)}</b> ({paid_n})\n"
+        f"💼 Sabke balance ka total: <b>{rs(liab)}</b>"
+    )
+
+
+@router.message(Command("dash"))
+async def cmd_dash(m: Message):
+    if is_staff(m.from_user.id):
+        await m.answer(await dash_text())
+
+
+def parse_uid(command: CommandObject) -> Optional[int]:
+    try:
+        return int((command.args or "").split()[0])
+    except (ValueError, IndexError):
+        return None
+
+
+@router.message(Command("balance"))
+async def cmd_balance(m: Message, command: CommandObject):
+    if not is_staff(m.from_user.id):
+        return
+    uid = parse_uid(command)
+    if uid is None:
+        await m.answer("Use: <code>/balance 123456789</code>")
+        return
+    u = await users.find_one({"_id": uid})
+    if not u:
+        await m.answer("⚠️ Ye user database me nahi mila.")
+        return
+    led_sum = await ledger_sum(uid)
+    bal = int(u.get("balance_p", 0))
+    pend_n, pend_p = await ref_pending({"referrals": referrals}, uid, REF_REWARD_PAISE)
+    recent = await ledger_recent(uid, 5)
+    pw = await withdrawals.find_one({"uid": uid, "status": "pending"})
+    warn = "" if led_sum == bal else f"\n⚠️ <b>Ledger mismatch!</b> ledger total {rs(led_sum)} ≠ balance {rs(bal)}"
+    text = (
+        f"💳 <b>Balance</b> — {mention(uid, u.get('name'))} (<code>{uid}</code>)\n\n"
+        f"💼 Balance: <b>{rs(bal)}</b>\n"
+        f"💰 Kamaya: {rs(u.get('earned_p', 0))} · 💸 Nikala: {rs(u.get('withdrawn_p', 0))}\n"
+        f"👥 Refers: {u.get('ref_count', 0)} · ⏳ pending: {pend_n} ({rs(pend_p)})\n"
+        f"🚩 Flag: {'HAAN' if u.get('ref_flag') else 'nahi'} · 🚫 Ban: {'HAAN' if u.get('banned') else 'nahi'}\n"
+        f"💸 Pending withdraw: {rs(pw['amount_p']) if pw else 'nahi'}{warn}\n\n"
+        "<b>Last 5:</b>\n" + ("\n".join(ledger_line(e) for e in recent) if recent else "—")
+    )
+    await m.answer(text, reply_markup=kb(
+        [btn("👥 Refers dekho", f"ar:{uid}")],
+        [btn("🚫 Ban", f"ab:{uid}")],
+    ))
+
+
+def parse_rupees(text: str) -> Optional[int]:
+    mt = re.fullmatch(r"([+-]?)(\d{1,6})(?:\.(\d{1,2}))?", (text or "").strip())
+    if not mt:
+        return None
+    paise = int(mt.group(2)) * 100 + (int(mt.group(3).ljust(2, "0")) if mt.group(3) else 0)
+    return -paise if mt.group(1) == "-" else paise
+
+
+ADJUST_MAX_P = 500000  # ek baar me max ₹5000
+
+
+@router.message(Command("adjust"))
+async def cmd_adjust(m: Message, command: CommandObject):
+    me = m.from_user.id
+    if not is_staff(me):
+        return
+    usage = "Use: <code>/adjust 123456789 +10 wajah</code>  (ya <code>-5</code>)"
+    parts = (command.args or "").split(None, 2)
+    if len(parts) < 3:
+        await m.answer(usage)
+        return
+    try:
+        uid = int(parts[0])
+    except ValueError:
+        await m.answer(usage)
+        return
+    amt = parse_rupees(parts[1])
+    reason = parts[2].strip()
+    if not amt or abs(amt) > ADJUST_MAX_P:
+        await m.answer("⚠️ Amount sahi nahi (jaise <code>+10</code>, <code>-5.50</code>; max ₹5000).\n" + usage)
+        return
+    if len(reason) < 3:
+        await m.answer("⚠️ Wajah (reason) zaroor likho — wo user ko bhi dikhegi.\n" + usage)
+        return
+    u = await users.find_one({"_id": uid}, {"name": 1, "balance_p": 1})
+    if not u:
+        await m.answer("⚠️ Ye user database me nahi mila.")
+        return
+    await set_state(me, "adj_confirm", {"uid": uid, "amt": amt, "reason": reason[:100]}, ttl_min=5)
+    await m.answer(
+        f"{'➕' if amt > 0 else '➖'} <b>Balance adjust — confirm</b>\n\n"
+        f"👤 {mention(uid, u.get('name'))} (<code>{uid}</code>)\n"
+        f"💼 Abhi: {rs(u.get('balance_p', 0))}\n"
+        f"✏️ Badlav: <b>{'+' if amt > 0 else '-'}{rs(abs(amt))}</b>\n"
+        f"📝 Wajah: {esc(reason[:100])}\n\nUser ko message bhi jayega.",
+        reply_markup=kb([btn("✅ Haan, karo", "adj:y"), btn("❌ Cancel", "adj:n")]),
+    )
+
+
+@router.callback_query(F.data.in_({"adj:y", "adj:n"}))
+async def cb_adjust(cb: CallbackQuery):
+    me = cb.from_user.id
+    if not is_staff(me):
+        await cb.answer("⛔ Sirf admin ke liye", show_alert=True)
+        return
+    st = await get_state(me)
+    if cb.data == "adj:n":
+        await cb.answer("Cancel")
+        await clear_state(me)
+        await safe_edit(cb, "❌ Adjust cancel.")
+        return
+    if not st or st["name"] != "adj_confirm":
+        await cb.answer("⌛ Time khatam — dobara /adjust likho", show_alert=True)
+        return
+    await cb.answer()
+    d = st["data"]
+    await clear_state(me)
+    res = await wallet_apply(d["uid"], d["amt"], "admin_adjust", note=d["reason"], by=me)
+    if not res["ok"]:
+        why = "balance kam hai" if res["reason"] == "low" else res["reason"]
+        await safe_edit(cb, f"⚠️ Adjust nahi hua: {esc(why)}")
+        return
+    amt, bal = d["amt"], res["balance_p"]
+    if amt > 0:
+        msg = f"ℹ️ Aapke balance me <b>+{rs(amt)}</b> add kiye gaye.\n📝 Wajah: {esc(d['reason'])}\n💼 Balance: <b>{rs(bal)}</b>"
+    else:
+        msg = (
+            f"ℹ️ Aapke balance se <b>{rs(-amt)}</b> kam kiye gaye.\n📝 Wajah: {esc(d['reason'])}\n"
+            f"💼 Balance: <b>{rs(bal)}</b>\n\nGalti lage to: {esc(SUPPORT_USERNAME)}"
+        )
+    spawn(deliver(d["uid"], lambda cid: bot.send_message(cid, msg)))
+    await safe_edit(cb, f"✅ Ho gaya. Naya balance: <b>{rs(bal)}</b>\n(ledger me record + user ko message gaya)")
+    await safe_log(f"✏️ <b>Admin adjust</b> by {esc(cb.from_user.full_name)}: <code>{d['uid']}</code> "
+                   f"{'+' if amt > 0 else '-'}{rs(abs(amt))} — {esc(d['reason'])}")
+
+
+async def refs_panel(uid: int) -> tuple:
+    rows = await friend_rows({"users": users, "referrals": referrals}, uid, 20)
+    u = await users.find_one({"_id": uid}, {"name": 1, "ref_flag": 1, "banned": 1, "ref_count": 1}) or {}
+    n_cr = await referrals.count_documents({"ref": uid, "status": "credited"})
+    n_pe = await referrals.count_documents({"ref": uid, "status": {"$in": ["pending", "settling"]}})
+    n_he = await referrals.count_documents({"ref": uid, "status": "held"})
+    body = "\n".join(
+        f"• {esc(disp_name(f['name'], 16))} — {FRIEND_LABEL.get(f['status'], f['status'])}"
+        f"{' (' + str(f['days_left']) + ' din)' if f.get('days_left') is not None else ''}"
+        f" · {fmt_ist(datetime.fromisoformat(f['at'])) if f.get('at') else '—'}"
+        for f in rows
+    ) or "Koi dost nahi."
+    text = (
+        f"👥 <b>Refers</b> — {mention(uid, u.get('name'))} (<code>{uid}</code>)\n"
+        f"✅ pakke: {n_cr} · ⏳ pending: {n_pe} · ⏸ held: {n_he} · gine gaye: {u.get('ref_count', 0)}\n"
+        f"🚩 Flag: {'HAAN' if u.get('ref_flag') else 'nahi'} · 🚫 Ban: {'HAAN' if u.get('banned') else 'nahi'}\n\n{body}"
+    )
+    rws = [[btn("🚫 Ban", f"ab:{uid}"), btn("💸 Clawback", f"ac:{uid}")]]
+    if n_he:
+        rws.append([btn("▶️ Held refers chhodo (flag hatao)", f"arl:{uid}")])
+    return text, kb(*rws)
+
+
+@router.message(Command("refs"))
+async def cmd_refs(m: Message, command: CommandObject):
+    if not is_staff(m.from_user.id):
+        return
+    uid = parse_uid(command)
+    if uid is None:
+        await m.answer("Use: <code>/refs 123456789</code>")
+        return
+    text, markup = await refs_panel(uid)
+    await m.answer(text, reply_markup=markup)
+
+
+async def clawback_refs(ref: int, by: int) -> dict:
+    """Is user ke saare 'pakke' refers ka paisa wapas lo (ledger me record + user ko message)."""
+    now = now_utc()
+    got = []
+    async for d in referrals.find({"ref": ref, "status": "credited"}):
+        x = await referrals.find_one_and_update(
+            {"_id": d["_id"], "status": "credited"}, {"$set": {"status": "clawback", "clawed_at": now, "clawed_by": by}}
+        )
+        if x:
+            got.append(x)
+    if not got:
+        return {"n": 0, "total_p": 0, "taken_p": 0}
+    total = sum(int(x.get("reward_p", 0)) for x in got)
+    counts = {"ref_count": -len(got)}
+    for x in got:
+        if x.get("wk"):
+            counts[f"wkc.{x['wk']}"] = counts.get(f"wkc.{x['wk']}", 0) - 1
+    taken, bal = 0, 0
+    for _ in range(2):
+        cur = await users.find_one({"_id": ref}, {"balance_p": 1}) or {}
+        bal = int(cur.get("balance_p", 0))
+        take = min(total, bal)
+        if take <= 0:
+            break
+        res = await wallet_apply(ref, -take, "clawback", ref=f"cb:{ref}:{int(time.time())}", note=f"{len(got)} refer cancel",
+                                 earned_delta=-total, extra_inc=counts, by=by)
+        if res["ok"]:
+            taken, bal = take, res["balance_p"]
+            break
+    if not taken:
+        await users.update_one({"_id": ref}, {"$inc": {"earned_p": -total, **counts}})
+    await users.update_one({"_id": ref}, {"$set": {"ref_flag": True}})
+    site_invalidate(ref)
+    spawn(deliver(
+        ref,
+        lambda cid: bot.send_message(
+            cid,
+            f"ℹ️ Aapke <b>{len(got)} refer</b> cancel kiye gaye (check me galat paaye gaye).\n"
+            f"💸 Balance se <b>{rs(taken)}</b> kata gaya.\n💼 Balance: <b>{rs(bal)}</b>\n\n"
+            f"Galti lage to: {esc(SUPPORT_USERNAME)}",
+        ),
+    ))
+    return {"n": len(got), "total_p": total, "taken_p": taken}
+
+
+@router.callback_query(F.data.regexp(r"^(ar|ab|ac|acy|arl):-?\d+$"))
+async def cb_refs_admin(cb: CallbackQuery):
+    me = cb.from_user.id
+    if not is_staff(me):
+        await cb.answer("⛔ Sirf admin ke liye", show_alert=True)
+        return
+    await cb.answer()
+    act, _, raw = cb.data.partition(":")
+    uid = int(raw)
+    if act == "ar":
+        text, markup = await refs_panel(uid)
+        await bot.send_message(me, text, reply_markup=markup)
+    elif act == "ab":
+        res = await users.update_one({"_id": uid}, {"$set": {"banned": True}})
+        invalidate_user(uid)
+        await bot.send_message(me, f"🚫 <code>{uid}</code> ban ho gaya." if res.matched_count else "⚠️ User nahi mila.")
+    elif act == "ac":
+        docs = [d async for d in referrals.find({"ref": uid, "status": "credited"})]
+        total = sum(int(d.get("reward_p", 0)) for d in docs)
+        await bot.send_message(
+            me,
+            f"💸 <b>Clawback</b> — <code>{uid}</code>\n\n{len(docs)} pakke refers ({rs(total)}) cancel honge aur balance se "
+            f"(jitna hai utna, max {rs(total)}) kat jayega. User ko message jayega.",
+            reply_markup=kb([btn("✅ Haan, clawback", f"acy:{uid}")], [btn("↩️ Wapas", f"ar:{uid}")]),
+        )
+    elif act == "acy":
+        r = await clawback_refs(uid, me)
+        await bot.send_message(
+            me, f"✅ {r['n']} refers cancel · {rs(r['taken_p'])} kata (kul {rs(r['total_p'])})." if r["n"] else "ℹ️ Koi pakka refer nahi mila."
+        )
+    elif act == "arl":
+        await users.update_one({"_id": uid}, {"$set": {"ref_flag": False}})
+        n = (await referrals.update_many({"ref": uid, "status": "held"}, {"$set": {"status": "pending", "mature_at": now_utc()}})).modified_count
+        await bot.send_message(me, f"▶️ {n} held refers chhod diye. Flag hata diya (5 min me settle honge).")
+
+
+# ---- owner: image / video links (bot se set, redeploy nahi chahiye)
+async def save_link(key: str, value: str) -> None:
+    LINKS[key] = value
+    await config.update_one({"_id": "links"}, {"$set": {key: value}}, upsert=True)
+
+
+def link_cmd(key: str, name: str):
+    async def handler(m: Message, command: CommandObject):
+        if not is_admin(m.from_user.id):
+            return
+        arg = (command.args or "").strip()
+        if arg.lower() in ("off", "none", "hata"):
+            await save_link(key, "")
+            await m.answer(f"✅ {name} band kar diya.")
+        elif arg.startswith(("http://", "https://")):
+            await save_link(key, arg)
+            await m.answer(f"✅ {name} set ho gaya:\n{esc(arg)}")
+        else:
+            cur = LINKS.get(key) or "set nahi"
+            await m.answer(f"Use: <code>/{command.command} https://link</code>  (band: <code>/{command.command} off</code>)\nAbhi: {esc(cur)}")
+
+    return handler
+
+
+router.message.register(link_cmd("entry_video", "Entry video link"), Command("setvideo"))
+router.message.register(link_cmd("drop_video", "Drop video link"), Command("setdropvideo"))
+
+
+@router.message(F.photo, F.caption.startswith("/setimage"))
+async def cmd_setimage_photo(m: Message):
+    if not is_admin(m.from_user.id):
+        return
+    await save_link("welcome_image", m.photo[-1].file_id)
+    await m.answer("✅ Welcome image set ho gayi. /start dabake dekho.")
+
+
+@router.message(Command("setimage"))
+async def cmd_setimage(m: Message, command: CommandObject):
+    if not is_admin(m.from_user.id):
+        return
+    arg = (command.args or "").strip()
+    if arg.lower() in ("off", "none", "hata"):
+        await save_link("welcome_image", "")
+        await m.answer("✅ Welcome image band kar di.")
+    elif arg.startswith(("http://", "https://")):
+        await save_link("welcome_image", arg)
+        await m.answer("✅ Welcome image link set ho gaya. /start dabake dekho.")
+    else:
+        await m.answer(
+            "Use: <code>/setimage https://image-link</code>\nYa koi <b>photo bhejo, caption me</b> <code>/setimage</code> likho.\n"
+            "Band karne ke liye: <code>/setimage off</code>"
+        )
+
+
+# ======================================================================
+#  v4: CHANNEL AUTO POST  (har AUTOPOST_HOURS ghante me ek post — bharosa badhane ke liye)
+#  Topics ghoomte rehte hain: giveaway / leaderboard / streak / refer / drop / kamai / about
+# ======================================================================
+def _medal(i: int) -> str:
+    return ("🥇", "🥈", "🥉")[i] if i < 3 else f"{i + 1}."
+
+
+def _post_rows(extra: Optional[list] = None, video: str = "entry_video", video_label: str = "▶️ Entry kaise karein? Video dekho") -> InlineKeyboardMarkup:
+    rows = [[btn("🤖 Bot kholo — Entry karo", url=BOT_LINK)], [btn("📱 Mini App", url=app_link())]]
+    rows += extra or []
+    u = (LINKS.get(video) or "").strip()
+    if u.startswith(("http://", "https://")):
+        rows.append([btn(video_label, url=u)])
+    return kb(*rows)
+
+
+async def post_giveaway():
+    gw = await get_giveaway()
+    if not gw or gw.get("closing"):
+        return None
+    total = await entries.count_documents({})
+    head = f"👥 Ab tak <b>{total}</b> log entry kar chuke hain!" if total else "👥 Abhi koi entry nahi hui — <b>sabse pehle aap</b> bano!"
+    when = f"\n⏰ Winner: <b>{esc(fmt_when(gw['winner_at']))}</b>" if gw.get("winner_at") else ""
+    text = (
+        "🎁 <b>Giveaway LIVE hai!</b>\n\n"
+        f"{head}\nAap bhi <b>entry karo</b> aur <b>Google Play code</b> jeeto 🏆{when}\n\n"
+        "🎟 Zyada chance = jeetne ke zyada mauke.\n"
+        "<i>Entry bilkul free hai — OTP ya password hum kabhi nahi maangte.</i>"
+    )
+    return text, _post_rows()
+
+
+async def post_leaderboard():
+    wk = week_key()
+    rows = await weekly_board(wk, 3)
+    prizes = LB_PRIZES_RS
+    top_n = int((rows[0].get("wkc") or {}).get(wk, 0)) if rows else 0
+    lines = []
+    for i in range(len(prizes)):
+        if i < len(rows):
+            r = rows[i]
+            cnt = int((r.get("wkc") or {}).get(wk, 0))
+            lines.append(f"{_medal(i)} <b>{esc(mask_name(r.get('name')))}</b> — {cnt} refers  ·  🎁 ₹{prizes[i]}")
+        else:
+            lines.append(f"{_medal(i)} <i>khaali — yahan aap ho sakte ho</i>  ·  🎁 ₹{prizes[i]}")
+    end = week_end_dt()
+    text = (
+        "🏆 <b>Weekly Leaderboard</b>\n\n" + "\n".join(lines) + "\n\n"
+        f"📊 Abhi top par <b>{top_n}</b> refers hain. Prize ke liye kam se kam <b>{LB_MIN_REFS}</b> refers chahiye.\n"
+        f"⏳ Hafta khatam: <b>{esc(fmt_when(end))}</b>\n\n"
+        "Dost ko bulao, upar chadho — prize seedha balance me 💰"
+    )
+    return text, _post_rows()
+
+
+async def post_streak():
+    cards = REWARD_CFG.get("streak") or []
+    cur = users.find({"streak": {"$gt": 0}, "banned": {"$ne": True}}).sort("streak", -1).limit(3)
+    top = [d async for d in cur]
+    cards_line = "  ·  ".join(f"{d} din = ₹{a}" for d, a in cards)
+    tops = "\n".join(f"{_medal(i)} {esc(mask_name(u.get('name')))} — 🔥 {u.get('streak', 0)} din" for i, u in enumerate(top))
+    text = (
+        "🔥 <b>Daily Streak — roz aao, card jeeto</b>\n\n"
+        "Roz <b>Daily Bonus</b> lo, streak badhao. Streak cards poore karo to paisa seedha balance me:\n"
+        f"🎯 {cards_line}\n"
+        + (f"\n🏅 <b>Abhi ke top streak:</b>\n{tops}\n" if top else "")
+        + "\n🎟 Har bonus se aapke jeetne ke chance bhi badhte hain."
+    )
+    return text, _post_rows(video="entry_video")
+
+
+async def post_refer():
+    total_refs = await sum_field(users, {}, "ref_count")
+    paid_p, paid_n = await paid_stats()
+    cur = users.find({"ref_count": {"$gt": 0}, "banned": {"$ne": True}}).sort("ref_count", -1).limit(3)
+    top = [d async for d in cur]
+    tops = "\n".join(f"{_medal(i)} {esc(mask_name(u.get('name')))} — {u.get('ref_count', 0)} dost" for i, u in enumerate(top))
+    text = (
+        "👥 <b>Dost bulao, paise kamao</b>\n\n"
+        f"Har <b>pakke dost</b> par <b>{rs(REF_REWARD_PAISE)}</b> + 🎟 chance milta hai.\n"
+        f"✅ Ab tak <b>{total_refs}</b> refers pakke hue"
+        + (f"\n💸 Ab tak <b>{rs(paid_p)}</b> ({paid_n} payments) users ko bheje ja chuke hain" if paid_p else "")
+        + (f"\n\n🏅 <b>Top referrers:</b>\n{tops}" if top else "")
+        + f"\n\nWithdraw {rs(MIN_WITHDRAW_PAISE)} se. Har payment ka proof is channel par aata hai ✅"
+    )
+    return text, _post_rows()
+
+
+async def post_drop():
+    d = await active_drop()
+    if not d:
+        return None
+    if d.get("status") == "live":
+        text = (
+            f"⚡ <b>Drop #{d['_id']} LIVE hai!</b>\n\n🎁 {esc(d.get('label', 'Google Play Redeem Code'))}\n"
+            f"📦 Total codes: <b>{d.get('total', 0)}</b>  ·  ✅ Claim hue: <b>{d.get('claimed_count', 0)}</b>\n\n"
+            "Jaldi karo — pehle aane walon ko code milta hai 🏃"
+        )
+    else:
+        when = esc(fmt_when(d.get("go_live_at"))) if d.get("go_live_at") else "jaldi"
+        text = (
+            f"⚡ <b>Naya Drop aa raha hai!</b>\n\n🎁 {esc(d.get('label', 'Google Play Redeem Code'))}\n"
+            f"📦 Codes: <b>{d.get('total', 0)}</b>  ·  ⏰ Live: <b>{when}</b>\n\n"
+            "Bot me <b>Remind Me</b> dabao, notification ON rakho 🔔"
+        )
+    return text, _post_rows(video="drop_video", video_label="▶️ Drop kaise lein? Video dekho")
+
+
+async def post_earners():
+    cur = users.find({"earned_p": {"$gt": 0}, "banned": {"$ne": True}}).sort("earned_p", -1).limit(3)
+    top = [d async for d in cur]
+    if not top:
+        return None
+    paid_p, paid_n = await paid_stats()
+    tops = "\n".join(f"{_medal(i)} {esc(mask_name(u.get('name')))} — <b>{rs(u.get('earned_p', 0))}</b>" for i, u in enumerate(top))
+    text = (
+        "💰 <b>Sabse zyada kamai</b>\n\n" + tops + "\n\n"
+        + (f"💸 Total paid: <b>{rs(paid_p)}</b> ({paid_n} payments)\n" if paid_p else "")
+        + "Refer, streak cards aur weekly leaderboard — teeno se kamai hoti hai. Aap bhi shuru karo 👇"
+    )
+    return text, _post_rows()
+
+
+async def post_about():
+    text = (
+        f"🎁 <b>{BOT_NAME}</b>\n\n"
+        "✅ Free Google Play codes ke giveaway aur drops\n"
+        "🔥 Daily bonus aur streak cards\n"
+        "👥 Refer karo, paise kamao\n"
+        "🏆 Weekly leaderboard prizes\n\n"
+        "100% free. OTP / password kabhi nahi. Har winner aur payment ka proof yahin aata hai ✅"
+    )
+    return text, _post_rows()
+
+
+AUTOPOST_TOPICS = [post_giveaway, post_leaderboard, post_streak, post_refer, post_drop, post_earners, post_about]
+
+
+async def autopost_cfg() -> dict:
+    doc = await config.find_one({"_id": "autopost"}) or {}
+    return {
+        "enabled": doc.get("enabled", AUTOPOST_DEFAULT_ON), "hours": float(doc.get("hours", AUTOPOST_HOURS)),
+        "last_at": doc.get("last_at"), "idx": int(doc.get("idx", 0)), "last_msg": doc.get("last_msg"),
+    }
+
+
+async def autopost_once(force: bool = False) -> str:
+    """Return: 'posted:<topic>' / 'off' / 'wait' / 'failed'."""
+    cfg = await autopost_cfg()
+    now = now_utc()
+    if not force:
+        if not cfg["enabled"]:
+            return "off"
+        la = cfg["last_at"]
+        if la is not None and now - la < timedelta(hours=cfg["hours"]):
+            return "wait"
+    prev_at = cfg["last_at"]
+    try:  # slot atomic claim — do deploy ek saath chalein to bhi ek hi post
+        flt: dict = {"_id": "autopost"}
+        if not force and prev_at is not None:
+            flt["last_at"] = prev_at
+        r = await config.update_one(flt, {"$set": {"last_at": now}}, upsert=prev_at is None)
+        if r.matched_count == 0 and r.upserted_id is None:
+            return "wait"
+    except DuplicateKeyError:
+        return "wait"
+    n = len(AUTOPOST_TOPICS)
+    for k in range(n):
+        i = (cfg["idx"] + k) % n
+        fn = AUTOPOST_TOPICS[i]
+        try:
+            built = await fn()
+        except Exception:
+            logger.exception("autopost topic %s", fn.__name__)
+            built = None
+        if not built:
+            continue
+        text, markup = built
+        res, msg = await deliver_result(TASK_CHANNEL_ID, lambda cid: bot.send_message(cid, text, reply_markup=markup))
+        if res == OK and msg is not None:
+            if AUTOPOST_DELETE_OLD and cfg["last_msg"]:
+                try:
+                    await bot.delete_message(TASK_CHANNEL_ID, int(cfg["last_msg"]))
+                except Exception:
+                    pass
+            await config.update_one({"_id": "autopost"}, {"$set": {"idx": i + 1, "last_msg": msg.message_id}})
+            return f"posted:{fn.__name__[5:]}"
+        spawn(alert_admin("autopost_fail", "⚠️ Channel par auto post nahi ja paya. Bot ko task channel me <b>admin</b> (post karne ki permission ke saath) banayein.", cooldown=3600))
+        await config.update_one({"_id": "autopost"}, {"$set": {"last_at": prev_at}} if prev_at else {"$unset": {"last_at": ""}})
+        return "failed"
+    return "failed"
+
+
+async def autopost_loop() -> None:
+    while True:
+        await asyncio.sleep(600)
+        try:
+            await autopost_once()
+        except Exception:
+            logger.exception("autopost_loop")
+
+
+@router.message(Command("autopost"))
+async def cmd_autopost(m: Message, command: CommandObject):
+    if not is_admin(m.from_user.id):
+        return
+    arg = (command.args or "").strip().lower().split()
+    if arg and arg[0] in ("on", "off"):
+        await config.update_one({"_id": "autopost"}, {"$set": {"enabled": arg[0] == "on"}}, upsert=True)
+    elif arg and arg[0] == "hours" and len(arg) > 1:
+        try:
+            h = float(arg[1])
+            assert 1 <= h <= 72
+        except (ValueError, AssertionError):
+            await m.answer("Use: <code>/autopost hours 12</code>  (1 se 72 ke beech)")
+            return
+        await config.update_one({"_id": "autopost"}, {"$set": {"hours": h}}, upsert=True)
+    elif arg and arg[0] == "now":
+        out = await autopost_once(force=True)
+        await m.answer(f"📣 Result: <code>{esc(out)}</code>")
+        return
+    c = await autopost_cfg()
+    la = fmt_ist(c["last_at"]) if c["last_at"] else "abhi tak nahi"
+    await m.answer(
+        "📣 <b>Channel Auto Post</b>\n\n"
+        f"Status: <b>{'ON ✅' if c['enabled'] else 'OFF ⏸'}</b>\nHar: <b>{c['hours']:g} ghante</b>\nPichhla post: {la}\n\n"
+        "<code>/autopost on</code> · <code>/autopost off</code>\n<code>/autopost hours 12</code> · <code>/autopost now</code>"
+    )
+
+
 @router.message()
 async def on_message(m: Message):
     if m.from_user is None or (m.text and m.text.startswith("/")):
@@ -2965,8 +3946,11 @@ async def on_message(m: Message):
         if st["name"] == "await_code":
             await handle_code(m)
             return
-        if st["name"] == "invite_code":
+        if st["name"] in ("invite_code", "invite_confirm"):
             await handle_invite_code(m)
+            return
+        if st["name"] == "report":
+            await handle_report(m)
             return
         if st["name"] == "wd_detail":
             await handle_wd_detail(m, st)
@@ -3012,7 +3996,7 @@ def result_post_texts(no, all_w: list, losers: list, total: int, declared_at, al
         f"👥 Total participants: <b>{total}</b>\n"
         f"🏅 Jeete: <b>{len(all_w)}</b>   ·   😔 Nahi jeete: <b>{lost_total}</b>\n"
         f"🕒 {fmt_ist(declared_at)}"
-        + ("\n🎲 Random Pick (tickets ke hisaab se)" if all_random else "")
+        + ("\n🎲 Random Pick (zyada 🎟 chance = zyada mauka)" if all_random else "")
     )
     foot = (
         "\n\n✅ Redeem code winner ke DM me bhej diya gaya hai.\n"
@@ -3402,14 +4386,17 @@ async def redeem_reward_core(uid: int, rid: str) -> dict:
         return {"status": "already" if cur else "not_found", "state": cur.get("status") if cur else None}
     paise = int(r["amount"]) * 100
     try:
-        res = await users.find_one_and_update(
-            {"_id": uid}, {"$inc": {"balance_p": paise, "earned_p": paise}}, return_document=ReturnDocument.AFTER
-        )
+        res = await wallet_apply(uid, paise, "card", ref=r["_id"], note=f"{r.get('track')} {r.get('target')}")
+        if not res["ok"] and res["reason"] != "dup":
+            raise RuntimeError(f"wallet card fail: {res['reason']}")
     except Exception:
         await rewards.update_one({"_id": r["_id"]}, {"$set": {"status": "earned"}, "$unset": {"claimed_at": ""}})
         raise
     site_invalidate(uid)
-    bal = int((res or {}).get("balance_p", paise))
+    if res["ok"]:
+        bal = int(res["balance_p"])
+    else:
+        bal = int(((await users.find_one({"_id": uid}, {"balance_p": 1})) or {}).get("balance_p", paise))
     spawn(deliver(
         uid,
         lambda cid: bot.send_message(
@@ -3574,7 +4561,7 @@ async def cb_refcheck(cb: CallbackQuery):
     if res == "need_join":
         await cb.answer("📢 Pehle channel join karein, fir ye button dabayein.", show_alert=True)
     elif res == "credited":
-        await cb.answer("✅ Verified! Aapke dost ko reward mil gaya. Shukriya 🙏", show_alert=True)
+        await cb.answer("✅ Verified! Dost ka refer pending me gaya (kuch din baad pakka). Shukriya 🙏", show_alert=True)
     else:
         await cb.answer("✅ Sab theek hai!", show_alert=True)
 
@@ -3656,27 +4643,53 @@ async def newuser_log_loop() -> None:
 
 
 # ---------------------------------------------------------------- invite code
-async def invite_core(uid: int, code: str) -> dict:
-    """Invite code (= referrer ki Telegram ID) lagao — bot aur Mini App dono yahi use karte hain."""
+async def _inv_fail(uid: int, status: str) -> dict:
+    """Galat invite attempt gino. INVITE_MAX_WRONG ke baad INVITE_BLOCK_HOURS ka block."""
+    day = today_ist()
+    r = await users.update_one({"_id": uid, "inv_day": day}, {"$inc": {"inv_n": 1}})
+    if r.matched_count == 0:
+        await users.update_one({"_id": uid}, {"$set": {"inv_day": day, "inv_n": 1}})
+        n = 1
+    else:
+        n = int(((await users.find_one({"_id": uid}, {"inv_n": 1})) or {}).get("inv_n", 1))
+    if n >= INVITE_MAX_WRONG:
+        await users.update_one({"_id": uid}, {"$set": {"inv_block_until": now_utc() + timedelta(hours=INVITE_BLOCK_HOURS)}})
+        return {"status": "blocked", "hours": int(INVITE_BLOCK_HOURS)}
+    return {"status": status, "left": max(INVITE_MAX_WRONG - n, 0)}
+
+
+async def invite_core(uid: int, code: str, preview: bool = False) -> dict:
+    """Invite code (= referrer ki Telegram ID) lagao — bot aur Mini App dono yahi use karte hain.
+    preview=True: sirf check karo aur 'ye <naam> ka code hai' dikhao (kuch save nahi hota)."""
     code = (code or "").strip()
-    u = await users.find_one({"_id": uid}, {"verified": 1, "banned": 1, "ref_by": 1, "ref_credited": 1})
+    u = await users.find_one(
+        {"_id": uid}, {"verified": 1, "banned": 1, "ref_by": 1, "ref_credited": 1, "joined_at": 1, "inv_block_until": 1}
+    )
     if not u:
         return {"status": "unregistered"}
     if u.get("banned"):
         return {"status": "banned"}
     if u.get("ref_by"):
-        res = await maybe_credit_referral(uid)  # pehle ka pending ho to credit
-        return {"status": "already", "credited": res == "credited"}
+        res = await maybe_credit_referral(uid)  # pehle ka pending ho to aage badhao
+        ru0 = await users.find_one({"_id": u["ref_by"]}, {"name": 1}) or {}
+        return {"status": "already", "credited": res == "credited", "ref_name": short_name(ru0.get("name"))}
+    now = now_utc()
+    blk = u.get("inv_block_until")
+    if blk and blk > now:
+        return {"status": "blocked", "hours": max(1, int((blk - now).total_seconds() // 3600) + 1)}
+    joined = u.get("joined_at")
+    if not joined or now - joined > timedelta(hours=INVITE_MAX_AGE_HOURS):
+        return {"status": "too_old", "hours": int(INVITE_MAX_AGE_HOURS)}
     if not code.isdigit() or len(code) > 15:
-        return {"status": "invalid"}
+        return await _inv_fail(uid, "invalid")
     ref = int(code)
     if ref == uid:
-        return {"status": "self"}
+        return await _inv_fail(uid, "self")
     ru = await users.find_one({"_id": ref}, {"banned": 1, "ref_by": 1, "name": 1})
     if not ru or ru.get("banned"):
-        return {"status": "not_found"}
+        return await _inv_fail(uid, "not_found")
     if ru.get("ref_by") == uid:
-        return {"status": "reciprocal"}
+        return await _inv_fail(uid, "reciprocal")
     member = await is_member(TASK_CHANNEL_ID, uid)
     if member is False:
         return {"status": "need_join"}
@@ -3687,6 +4700,8 @@ async def invite_core(uid: int, code: str) -> dict:
             cooldown=900,
         ))
         return {"status": "check_failed"}
+    if preview:
+        return {"status": "preview", "ref_name": short_name(ru.get("name")), "code": str(ref)}
     upd = await users.update_one(
         {"_id": uid, "ref_by": None}, {"$set": {"ref_by": ref, "ref_via": "code", "ref_at": now_utc()}}
     )
@@ -3694,10 +4709,10 @@ async def invite_core(uid: int, code: str) -> dict:
         return {"status": "already", "credited": False}
     invalidate_user(uid)
     if not u.get("verified"):
-        return {"status": "need_verify", "ref_name": ru.get("name")}
+        return {"status": "need_verify", "ref_name": short_name(ru.get("name"))}
     res = await maybe_credit_referral(uid)
     site_invalidate(uid)
-    return {"status": "ok", "credited": res == "credited", "ref_name": ru.get("name")}
+    return {"status": "ok", "credited": res == "credited", "ref_name": short_name(ru.get("name"))}
 
 
 def invite_retry_kb() -> InlineKeyboardMarkup:
@@ -3711,15 +4726,22 @@ async def cb_invite(cb: CallbackQuery):
     await touch_user(cb.from_user)
     u = await users.find_one({"_id": uid}, {"ref_by": 1}) or {}
     if u.get("ref_by"):
-        await safe_edit(cb, "✅ Aapka invite code pehle hi lag chuka hai. Shukriya 🙏", kb([btn("⬅️ " + sc("back"), "refer")]))
+        ru0 = await users.find_one({"_id": u["ref_by"]}, {"name": 1}) or {}
+        await safe_edit(
+            cb,
+            f"✅ Aapne pehle hi <b>{esc(short_name(ru0.get('name')))}</b> ka invite code laga rakha hai.\n"
+            "Ek hi code lagta hai, dobara nahi lag sakta 🙏",
+            kb([btn("⬅️ " + sc("back"), "refer")]),
+        )
         return
     await set_state(uid, "invite_code", ttl_min=10)
     await safe_edit(
         cb,
         f"🎟 <b>{sc('invite code daalo')}</b>\n\n"
-        "Jis dost ne aapko bot bataya, uska <b>Invite Code</b> (number) yahan bhej do 👇\n"
-        "Pehle aapko hamara <b>channel join</b> karna hoga.\n\n"
-        "<i>Cancel karna ho to /cancel likho.</i>",
+        "Jis dost ne aapko bot bataya, uska <b>Invite Code</b> (number) yahan bhejo 👇\n\n"
+        f"ℹ️ Code sirf <b>pehle {INVITE_MAX_AGE_HOURS:g} ghante</b> me lag sakta hai, aur ek hi baar.\n"
+        "📢 Pehle channel join karna hoga.\n\n"
+        "<i>Cancel: /cancel</i>",
         kb([btn("⬅️ " + sc("back"), "refer")]),
     )
 
@@ -3730,43 +4752,95 @@ async def handle_invite_code(m: Message) -> None:
         await m.answer("⚠️ Invite code number hota hai — text me bhejo 🙂")
         return
     await touch_user(m.from_user)
-    res = await invite_core(uid, m.text)
+    res = await invite_core(uid, m.text, preview=True)
     st = res["status"]
-    if st == "invalid":
-        await m.answer("⚠️ Invite code sirf <b>number</b> hota hai (jaise <code>7315805581</code>). Dobara bhejo 👇")
+    left = res.get("left")
+    left_txt = f"\n<i>Aaj {left} koshish aur baaki hain.</i>" if left is not None else ""
+    if st == "preview":
+        await set_state(uid, "invite_confirm", {"code": res["code"]}, ttl_min=10)
+        await m.answer(
+            f"🎟 Ye code <b>{esc(res['ref_name'])}</b> ka hai.\n\nKya yehi aapko laya? Pakka karo 👇\n"
+            "<i>Ek baar lagne ke baad badal nahi sakte.</i>",
+            reply_markup=kb([btn("✅ " + sc("haan, laga do"), "inv:y"), btn("❌ " + sc("nahi"), "inv:n")]),
+        )
+        return
+    if st in ("invalid", "not_found", "self", "reciprocal"):
+        msg = {
+            "invalid": "⚠️ Invite code sirf <b>number</b> hota hai (jaise <code>7315805581</code>).",
+            "not_found": "❌ Ye invite code nahi mila. Dost se sahi code puchho.",
+            "self": "😅 Apna hi code nahi chalega! Dost ka code bhejo.",
+            "reciprocal": "⚠️ Is dost ne pehle hi aapka code lagaya hai — ek doosre ko refer nahi kar sakte.",
+        }[st]
+        await m.answer(msg + left_txt, reply_markup=invite_retry_kb())
         return
     await clear_state(uid)
+    await send_invite_result(uid, res, m.answer)
+
+
+async def send_invite_result(uid: int, res: dict, send) -> None:
+    st = res["status"]
     if st == "need_join":
-        await m.answer(
+        await send(
             "📢 <b>Pehle channel join karo</b>, phir dobara code daalo 🙂",
             reply_markup=kb([btn("📢 " + sc("join channel"), url=TASK_CHANNEL_LINK)], [btn("🔁 " + sc("dubara code daalo"), "invite")]),
         )
-    elif st == "not_found":
-        await m.answer(
-            "❌ Ye invite code nahi mila.\nDost se uska sahi code (Refer &amp; Earn screen me dikhta hai) pooch kar dobara daalo.",
-            reply_markup=invite_retry_kb(),
+    elif st == "blocked":
+        await send(
+            f"⏳ Bahut galat koshish ho gayi. <b>{res.get('hours', 24)} ghante</b> baad dobara try karo 🙏\n"
+            f"Madad: {esc(SUPPORT_USERNAME)}",
+            reply_markup=back_kb(),
         )
-    elif st == "self":
-        await m.answer("😅 Apna hi code nahi chalega! Dost ka code bhejo.", reply_markup=invite_retry_kb())
-    elif st == "reciprocal":
-        await m.answer("⚠️ Is dost ne pehle hi aapka code lagaya hua hai — aap ek doosre ko refer nahi kar sakte.", reply_markup=back_kb())
+    elif st == "too_old":
+        await send(
+            f"⌛ Invite code sirf naye users ke liye hai (pehle <b>{res.get('hours', 48)} ghante</b>). "
+            "Ab ye lag nahi sakta.\nAap apna code dost ko dekar kamai kar sakte ho 💰",
+            reply_markup=kb([btn("💰 " + sc("paise kamao"), "refer")]),
+        )
     elif st == "already":
-        await m.answer("ℹ️ Aapka invite code pehle hi lag chuka hai.", reply_markup=back_kb())
+        who = f" <b>{esc(res['ref_name'])}</b> ka" if res.get("ref_name") else ""
+        await send(f"ℹ️ Aapne pehle hi{who} invite code laga rakha hai. Dobara nahi lag sakta.", reply_markup=back_kb())
     elif st == "banned":
-        await m.answer(f"🚫 Aapka account restricted hai. Support: {esc(SUPPORT_USERNAME)}")
+        await send(f"🚫 Aapka account restricted hai. Support: {esc(SUPPORT_USERNAME)}")
     elif st == "check_failed":
-        await m.answer("⏳ Abhi channel check nahi ho pa raha. Thodi der baad dobara try karo 🙏", reply_markup=invite_retry_kb())
+        await send("⏳ Abhi channel check nahi ho pa raha. Thodi der baad dobara try karo 🙏", reply_markup=invite_retry_kb())
     elif st == "need_verify":
-        await m.answer("✅ Invite code mil gaya! Bas ek chhota <b>verification</b> baaki hai 👇")
+        await send("✅ Invite code mil gaya! Bas ek chhota <b>verification</b> baaki hai 👇")
         await send_captcha(uid)
     elif st == "ok":
-        extra = f"\n💰 Aapke dost ko <b>{rs(REF_REWARD_PAISE)}</b> mil gaye." if res.get("credited") else ""
-        await m.answer(
-            f"🎉 <b>Invite code lag gaya!</b>{extra}\nShukriya 🙏",
-            reply_markup=await user_menu(uid),
+        extra = (
+            f"\n⏳ <b>{esc(res.get('ref_name'))}</b> ko refer {REF_MATURE_DAYS:g} din baad pakka milega."
+            if res.get("credited") else ""
         )
+        await send(f"🎉 <b>Invite code lag gaya!</b>{extra}\nShukriya 🙏", reply_markup=await user_menu(uid))
     else:
-        await m.answer("⚠️ Kuch gadbad hui, thodi der baad try karo.", reply_markup=back_kb())
+        await send("⚠️ Kuch gadbad hui, thodi der baad try karo.", reply_markup=back_kb())
+
+
+@router.callback_query(F.data.in_({"inv:y", "inv:n"}))
+async def cb_invite_confirm(cb: CallbackQuery):
+    uid = cb.from_user.id
+    st = await get_state(uid)
+    if cb.data == "inv:n":
+        await cb.answer()
+        await clear_state(uid)
+        await safe_edit(cb, "👍 Theek hai, code nahi lagaya.", kb([btn("🔁 " + sc("dusra code"), "invite")], [btn("⬅️ " + sc("menu"), "menu")]))
+        return
+    if not st or st["name"] != "invite_confirm":
+        await cb.answer("⌛ Time khatam — dobara code daalo", show_alert=True)
+        return
+    await cb.answer()
+    code = st["data"].get("code", "")
+    await clear_state(uid)
+    res = await invite_core(uid, code)
+
+    async def send(text, reply_markup=None):
+        await safe_edit(cb, text, reply_markup)
+
+    if res["status"] == "need_verify":
+        await safe_edit(cb, "✅ Invite code mil gaya! Bas ek chhota <b>verification</b> baaki hai 👇")
+        await send_captcha(uid)
+        return
+    await send_invite_result(uid, res, send)
 
 
 # ---------------------------------------------------------------- refer & earn screen
@@ -3779,25 +4853,116 @@ async def cb_refer(cb: CallbackQuery):
     u = await users.find_one({"_id": uid}) or {}
     wk = week_key()
     link = ref_link(uid)
-    share_text = "🎁 Free Google Play redeem codes jeeto! Mera invite code ya link use karo:"
+    pend_n, pend_p = await ref_pending({"referrals": referrals}, uid, REF_REWARD_PAISE)
+    share_text = "🎁 Free Google Play codes jeeto! Mera invite code ya link use karo:"
+    pend_line = f"   ⏳ Pending: <b>{pend_n}</b> ({rs(pend_p)})" if pend_n else ""
     text = (
-        f"💰 <b>{sc('refer & earn')}</b>\n"
+        f"💰 <b>{sc('paise kamao')}</b>\n"
         "━━━━━━━━━━━━━━━\n"
-        f"Har dost = <b>{rs(REF_REWARD_PAISE)}</b> + 1 ticket 🎁\n"
-        f"Weekly top 3 = <b>{prizes_line()}</b> ({LB_MIN_REFS}+ refers)\n\n"
+        f"Dost ko bulao — har <b>pakke dost</b> par <b>{rs(REF_REWARD_PAISE)}</b> 🎁\n"
+        f"<i>(dost {REF_MATURE_DAYS:g} din channel me rahe tab pakka)</i>\n\n"
         f"🎟 <b>Aapka Invite Code:</b>\n<code>{uid}</code>\n\n"
         f"🔗 <b>Aapka Link:</b>\n<code>{link}</code>\n\n"
-        f"👥 Total refers: <b>{u.get('ref_count', 0)}</b>  ·  Is hafte: <b>{wk_count(u, wk)}</b>\n"
-        f"💼 Balance: <b>{rs(u.get('balance_p', 0))}</b>  (min withdraw {rs(MIN_WITHDRAW_PAISE)})"
+        f"✅ Pakke dost: <b>{u.get('ref_count', 0)}</b>{pend_line}\n"
+        f"💼 Balance: <b>{rs(u.get('balance_p', 0))}</b>  (withdraw {rs(MIN_WITHDRAW_PAISE)} se)\n"
+        f"🏅 Weekly top 3 ko extra {prizes_line()} ({LB_MIN_REFS}+ refers) — is hafte aapke: <b>{wk_count(u, wk)}</b>"
     )
     rows = [[btn("📤 " + sc("share link"), url=f"https://t.me/share/url?url={quote(link)}&text={quote(share_text)}")]]
-    row2 = []
+    rows.append([btn("👥 " + sc("mere dost"), "friends"), btn("💳 " + sc("meri kamai"), "earn")])
+    row3 = [btn("💸 " + sc("withdraw"), "w:start"), btn("📋 " + sc("status"), "wstat")]
+    rows.append(row3)
+    row4 = []
     if not u.get("ref_by"):
-        row2.append(btn("🎟 " + sc("invite code daalo"), "invite"))
-    row2.append(btn("💸 " + sc("withdraw"), "w:start"))
-    rows.append(row2)
-    rows.append([btn("🏅 " + sc("leaderboard"), "top"), btn("⬅️ " + sc("back"), "menu")])
+        row4.append(btn("🎟 " + sc("invite code daalo"), "invite"))
+    row4.append(btn("🏅 " + sc("leaderboard"), "top"))
+    rows.append(row4)
+    rows.append([btn("⬅️ " + sc("back"), "menu")])
     await safe_edit(cb, text, kb(*rows))
+
+
+FRIEND_LABEL = {
+    "credited": "✅ pakka",
+    "pending": "⏳ pending",
+    "held": "⏳ check me",
+    "verify": "🛡 verify baaki",
+    "join": "📢 channel join baaki",
+    "cancelled": "❌ cancel",
+    "clawback": "❌ cancel",
+    "banned": "🚫 band",
+}
+
+
+def friend_line(f: dict) -> str:
+    label = FRIEND_LABEL.get(f["status"], f["status"])
+    if f["status"] == "pending" and f.get("days_left") is not None:
+        label = f"⏳ pending ({f['days_left']} din baaki)"
+    return f"• {esc(disp_name(f['name'], 18))} — {label}"
+
+
+@router.callback_query(F.data == "friends")
+async def cb_friends(cb: CallbackQuery):
+    uid = cb.from_user.id
+    await cb.answer()
+    await touch_user(cb.from_user)
+    rows = await friend_rows({"users": users, "referrals": referrals}, uid, 20)
+    if rows:
+        body = "\n".join(friend_line(f) for f in rows)
+    else:
+        body = "Abhi koi dost nahi juda. Apna invite code ya link share karo 👇"
+    await safe_edit(
+        cb,
+        f"👥 <b>{sc('mere dost')}</b>\n━━━━━━━━━━━━━━━\n{body}\n\n"
+        f"<i>Dost {REF_MATURE_DAYS:g} din channel me rahe to refer pakka ho jata hai.</i>",
+        kb([btn("⬅️ " + sc("back"), "refer")]),
+    )
+
+
+@router.callback_query(F.data == "earn")
+async def cb_earn(cb: CallbackQuery):
+    uid = cb.from_user.id
+    await cb.answer()
+    await touch_user(cb.from_user)
+    u = await users.find_one({"_id": uid}, {"balance_p": 1, "earned_p": 1, "withdrawn_p": 1}) or {}
+    ents = await ledger_recent(uid, 20)
+    body = "\n".join(ledger_line(e) for e in ents) if ents else "Abhi koi entry nahi. Dost bulao aur kamao 💪"
+    await safe_edit(
+        cb,
+        f"💳 <b>{sc('meri kamai')}</b>\n━━━━━━━━━━━━━━━\n"
+        f"💼 Balance: <b>{rs(u.get('balance_p', 0))}</b>\n"
+        f"💰 Kamaya: {rs(u.get('earned_p', 0))}  ·  💸 Nikala: {rs(u.get('withdrawn_p', 0))}\n\n"
+        f"<b>Pichhle 20:</b>\n{body}",
+        kb([btn("💸 " + sc("withdraw"), "w:start")], [btn("⬅️ " + sc("back"), "refer")]),
+    )
+
+
+WD_STATUS_TEXT = {
+    "pending": "⏳ Admin check kar raha hai",
+    "paid": "✅ Bhej diya gaya",
+    "confirmed": "✅ Aapko mil gaya",
+    "rejected": "❌ Reject — paisa balance me wapas",
+    "disputed": "⚠️ Admin dekh raha hai",
+}
+
+
+@router.callback_query(F.data == "wstat")
+async def cb_wstat(cb: CallbackQuery):
+    uid = cb.from_user.id
+    await cb.answer()
+    await touch_user(cb.from_user)
+    ws = [w async for w in withdrawals.find({"uid": uid}).sort("created_at", -1).limit(3)]
+    if not ws:
+        body = "Abhi koi withdraw request nahi."
+    else:
+        body = "\n\n".join(
+            f"💰 <b>{rs(w['amount_p'])}</b>  ·  {fmt_ist(w['created_at'])}\n{WD_STATUS_TEXT.get(w['status'], w['status'])}"
+            for w in ws
+        )
+    await safe_edit(
+        cb,
+        f"📋 <b>{sc('withdraw status')}</b>\n━━━━━━━━━━━━━━━\n{body}\n\n"
+        f"🕒 Admin khud bhejta hai, <b>{esc(WD_ETA_TEXT)}</b> me.",
+        kb([btn("⬅️ " + sc("back"), "refer")]),
+    )
 
 
 # ---------------------------------------------------------------- weekly leaderboard screen
@@ -3848,16 +5013,94 @@ async def cb_about(cb: CallbackQuery):
         cb,
         f"ℹ️ <b>{sc('about us')}</b>\n"
         "━━━━━━━━━━━━━━━\n"
-        f"🎁 <b>{BOT_NAME}</b> par free Google Play redeem codes ke giveaway aur drops hote hain.\n\n"
-        "✅ 100% FREE — paise, OTP ya password kabhi nahi maange jaate.\n"
-        "🏆 Har winner ka proof channel par post hota hai.\n\n"
-        f"👤 Owner / Support: {esc(SUPPORT_USERNAME)}",
+        f"🎁 <b>{BOT_NAME}</b> par free Google Play codes ke giveaway aur drops hote hain.\n\n"
+        "✅ 100% FREE — OTP, password ya card detail kabhi nahi maangte.\n"
+        "🏆 Har winner aur har payment ka proof channel par aata hai.\n\n"
+        f"👤 Support: {esc(SUPPORT_USERNAME)}",
         kb(
             [btn("👤 " + sc("contact") + f" {SUPPORT_USERNAME}", url=SUPPORT_LINK)],
             [btn("📢 " + sc("channel"), url=TASK_CHANNEL_LINK), btn("👥 " + sc("group"), url=GROUP_LINK)],
-            [btn("🏆 " + sc("pichhle winners"), "winners")],
+            [btn("🏆 " + sc("pichhle winners"), "winners"), btn("📋 " + sc("rules & faq"), "faq")],
             [btn("⬅️ " + sc("back"), "menu")],
         ),
+    )
+
+
+FAQ_TEXT = (
+    "📋 <b>Rules &amp; FAQ</b>\n\n"
+    "<b>Kya sach me free hai?</b>\nHaan. Yahan kabhi paise nahi maange jaate.\n\n"
+    "<b>Winner kaise chuna jata hai?</b>\nRandom. Jiske paas zyada 🎟 chance, uske chunne ke mauke zyada.\n\n"
+    "<b>Refer ka paisa kab milta hai?</b>\n"
+    f"Dost verify + channel join kare, phir <b>{REF_MATURE_DAYS:g} din</b> channel me rahe — tab pakka. "
+    "Tab tak 'pending' dikhta hai.\n\n"
+    "<b>Invite code kab laga sakte hain?</b>\n"
+    f"Sirf naye user, pehle <b>{INVITE_MAX_AGE_HOURS:g} ghante</b> me, aur ek hi baar.\n\n"
+    "<b>Withdraw kaise?</b>\n"
+    f"Balance <b>{rs(MIN_WITHDRAW_PAISE)}</b> se. Admin khud paisa bhejta hai, <b>{esc(WD_ETA_TEXT)}</b> me. "
+    "Bhejte hi proof channel par aata hai.\n\n"
+    "<b>Kya galat hai?</b>\n"
+    "Fake account, khud ko refer, doosre ka code chura kar lagana = refer cancel, ban. "
+    "Paisa kabhi bina message aur record ke nahi katta.\n\n"
+    "🆘 Dikkat ho to <b>Problem batao</b> dabao."
+)
+
+
+@router.callback_query(F.data == "faq")
+async def cb_faq(cb: CallbackQuery):
+    await cb.answer()
+    await touch_user(cb.from_user)
+    await safe_edit(
+        cb, FAQ_TEXT,
+        kb([btn("🆘 " + sc("problem batao"), "report")], [btn("⬅️ " + sc("back"), "help")]),
+    )
+
+
+# ---------------------------------------------------------------- problem report
+_report_times: dict = {}
+
+
+async def start_report(uid: int) -> None:
+    await set_state(uid, "report", ttl_min=15)
+    await bot.send_message(
+        uid,
+        "🆘 <b>Problem batao</b>\n\nApni dikkat ek message me likho (screenshot bhi bhej sakte ho) 👇\n<i>Cancel: /cancel</i>",
+    )
+
+
+@router.callback_query(F.data == "report")
+async def cb_report(cb: CallbackQuery):
+    await cb.answer()
+    await touch_user(cb.from_user)
+    await start_report(cb.from_user.id)
+
+
+async def handle_report(m: Message) -> None:
+    uid = m.from_user.id
+    text = (m.text or m.caption or "").strip()
+    if not text and not m.photo:
+        await m.answer("⚠️ Likh kar ya screenshot bhej kar batao 🙏")
+        return
+    dq = _report_times.setdefault(uid, deque(maxlen=10))
+    recent = [t for t in dq if time.monotonic() - t < 3600]
+    if len(recent) >= REPORT_PER_HOUR:
+        await clear_state(uid)
+        await m.answer("⏳ Aapne abhi kaafi reports bhej di hain. Thodi der baad dobara batao 🙏", reply_markup=back_kb())
+        return
+    dq.append(time.monotonic())
+    await clear_state(uid)
+    head = (
+        "🆘 <b>Problem Report</b>\n\n"
+        f"👤 {mention(uid, m.from_user.full_name)}  (<code>{uid}</code>)"
+        + (f"  @{esc(m.from_user.username)}" if m.from_user.username else "")
+        + f"\n\n{esc(text[:1500])}\n\nCheck: <code>/balance {uid}</code>"
+    )
+    for aid in sorted(STAFF):
+        await deliver(aid, lambda cid: bot.send_message(cid, head))
+        if m.photo:
+            await deliver(aid, lambda cid: bot.copy_message(cid, m.chat.id, m.message_id))
+    await m.answer(
+        f"✅ <b>Aapki baat admin tak pahunch gayi.</b>\nJaldi jawab milega 🙏\nZaroorat ho to: {esc(SUPPORT_USERNAME)}",
+        reply_markup=back_kb(),
     )
 
 
@@ -3909,18 +5152,20 @@ async def withdraw_core(uid: int, method: str, detail: str, holder: str) -> dict
         return {"status": "invalid", "field": err}
     if await withdrawals.find_one({"uid": uid, "status": "pending"}):
         return {"status": "has_pending"}
+    wid = f"{uid}-{int(time.time() * 1000)}-{random.randint(100, 999)}"
     bal = 0
-    for _ in range(3):  # balance badalte hi retry (double-spend se bachne ke liye)
+    for _ in range(3):  # balance badalte hi retry (double-spend se bachne ke liye — debit atomic hai)
         cur = await users.find_one({"_id": uid}, {"balance_p": 1}) or {}
         bal = int(cur.get("balance_p", 0))
         if bal < MIN_WITHDRAW_PAISE:
             return {"status": "low", "balance_p": bal, "min_p": MIN_WITHDRAW_PAISE}
-        res = await users.update_one({"_id": uid, "balance_p": bal}, {"$inc": {"balance_p": -bal}})
-        if res.matched_count:
+        res = await wallet_apply(uid, -bal, "withdraw", ref=wid, note=clean["method"].upper())
+        if res["ok"]:
             break
+        if res["reason"] == "dup":
+            return {"status": "busy"}
     else:
         return {"status": "busy"}
-    wid = f"{uid}-{int(time.time() * 1000)}-{random.randint(100, 999)}"
     w = {
         "_id": wid, "uid": uid, "name": u.get("name"), "username": u.get("username"),
         "amount_p": bal, "method": clean["method"], "detail": clean["detail"], "holder": clean["holder"],
@@ -3929,7 +5174,7 @@ async def withdraw_core(uid: int, method: str, detail: str, holder: str) -> dict
     try:
         await withdrawals.insert_one(w)
     except Exception:
-        await users.update_one({"_id": uid}, {"$inc": {"balance_p": bal}})  # paisa wapas
+        await wallet_apply(uid, bal, "refund", ref=f"fail:{wid}", note="withdraw request save nahi hui")  # paisa wapas
         logger.exception("withdraw insert fail")
         return {"status": "busy"}
     site_invalidate(uid)
@@ -3937,7 +5182,8 @@ async def withdraw_core(uid: int, method: str, detail: str, holder: str) -> dict
     return {"status": "ok", "id": wid, "amount_p": bal}
 
 
-async def notify_withdrawal(w: dict, reminder: bool = False, from_list: bool = False) -> None:
+async def notify_withdrawal(w: dict, reminder: bool = False, from_list: bool = False, only: Optional[int] = None) -> None:
+    """Withdraw card SAB admins ko (only=<id> ho to ek ko). Jo pehle Paid/Reject dabaye uska record."""
     u = await users.find_one({"_id": w["uid"]}) or {}
     flag = "\n⚠️ <b>Fraud flag</b> — pehle check kar lein!" if u.get("ref_flag") else ""
     head = "⏰ <b>REMINDER — Withdraw pending</b>" if reminder else "💸 <b>New Withdraw Request</b>"
@@ -3950,16 +5196,67 @@ async def notify_withdrawal(w: dict, reminder: bool = False, from_list: bool = F
         f"📊 Refers: {u.get('ref_count', 0)} · Total earned: {rs(u.get('earned_p', 0))}\n"
         f"🕒 {fmt_ist(w['created_at'])}{flag}"
     )
-    res = await deliver(
-        ADMIN_ID,
-        lambda cid: bot.send_message(
-            cid, text, reply_markup=kb([btn("✅ Paid kar diya", f"wa:paid:{w['_id']}"), btn("❌ Reject", f"wa:rej:{w['_id']}")])
-        ),
+    markup = kb(
+        [btn("✅ Paid kar diya", f"wa:paid:{w['_id']}"), btn("❌ Reject", f"wa:rej:{w['_id']}")],
+        [btn("👥 Refers dekho", f"ar:{w['uid']}")],
     )
-    if res == OK and not from_list:
+    ok_any = False
+    for aid in ([only] if only else sorted(STAFF)):
+        res, msg = await deliver_result(aid, lambda cid: bot.send_message(cid, text, reply_markup=markup))
+        if res == OK and msg is not None:
+            ok_any = True
+            await withdrawals.update_one({"_id": w["_id"]}, {"$set": {f"admin_msgs.{aid}": msg.message_id}})
+    if ok_any and not from_list:
         await withdrawals.update_one(
             {"_id": w["_id"]}, {"$set": {"admin_notified": True, "remind_at": now_utc() + timedelta(hours=6)}}
         )
+
+
+async def sync_admin_cards(wid: str, text: str) -> None:
+    """Kisi ek admin ne kaam kar diya: baaki admins ke card se buttons hata do (already done)."""
+    w = await withdrawals.find_one({"_id": wid}) or {}
+    for aid, mid in (w.get("admin_msgs") or {}).items():
+        try:
+            await bot.edit_message_text(text, chat_id=int(aid), message_id=int(mid))
+        except TelegramAPIError:
+            pass
+
+
+def mask_payout(method: str, detail: str) -> str:
+    d = str(detail or "").strip()
+    if method == "upi" and "@" in d:
+        name, _, handle = d.partition("@")
+        return f"{name[:2]}***@{handle}"
+    if method == "mobile":
+        digits = re.sub(r"\D", "", d)[-10:]
+        return f"{digits[:2]}******{digits[-2:]}" if len(digits) >= 4 else "******"
+    acct = re.sub(r"\D", "", d.split()[0]) if d.split() else ""
+    return "••••" + acct[-4:] if acct else "••••"
+
+
+async def post_proof(w: dict) -> None:
+    """Paid hote hi proof channel par post (UPI/account masked)."""
+    _paid_cache["t"] = -1e9
+    total_p, n = await paid_stats()
+    text = (
+        "✅ <b>Payment Proof</b>\n\n"
+        f"💰 Amount: <b>{rs(w['amount_p'])}</b>\n"
+        f"🏦 {METHOD_LABEL.get(w['method'], w['method'])}: <code>{esc(mask_payout(w['method'], w['detail']))}</code>\n"
+        f"👤 {esc(mask_name(w.get('name')))}\n"
+        f"🕒 {fmt_ist(now_utc())}\n\n"
+        f"📊 Ab tak total paid: <b>{rs(total_p)}</b> ({n} payments)\n"
+        f"🤖 {BOT_LINK}"
+    )
+    res, msg = await deliver_result(PROOF_CHANNEL_ID, lambda cid: bot.send_message(cid, text))
+    if res == OK and msg is not None:
+        await withdrawals.update_one({"_id": w["_id"]}, {"$set": {"proof_msg_id": msg.message_id}})
+    else:
+        spawn(alert_admin(
+            "proof_fail",
+            "⚠️ Payment proof channel me post nahi hua. Bot ko proof channel me <b>admin</b> banayein "
+            "(PROOF_CHANNEL_ID / TASK_CHANNEL_ID).",
+            cooldown=3600,
+        ))
 
 
 async def withdraw_watch_once() -> int:
@@ -4023,7 +5320,8 @@ async def cb_wd_start(cb: CallbackQuery):
         await safe_edit(
             cb,
             f"⏳ <b>Aapki ek withdraw request pending hai</b>\n\n💰 {rs(pend['amount_p'])}\n"
-            "Admin jaldi bhej dega, tab tak thoda wait karo 🙏",
+            f"🕒 Bheji: {fmt_ist(pend['created_at'])}\n"
+            f"Admin khud bhejta hai, <b>{esc(WD_ETA_TEXT)}</b> me aa jata hai 🙏",
             back,
         )
         return
@@ -4092,7 +5390,7 @@ async def handle_wd_name(m: Message, st: dict) -> None:
         f"💰 Amount: <b>{rs(u.get('balance_p', 0))}</b>\n"
         f"🏦 {METHOD_LABEL[clean['method']]}: <code>{esc(clean['detail'])}</code>\n"
         f"🧾 Name: <b>{esc(clean['holder'])}</b>\n\n"
-        "Sab sahi hai na? 👇",
+        f"🕒 Paisa <b>{esc(WD_ETA_TEXT)}</b> me aayega.\n\nSab sahi hai na? 👇",
         reply_markup=kb([btn("✅ " + sc("confirm"), "w:ok"), btn("❌ " + sc("cancel"), "w:no")]),
     )
 
@@ -4121,7 +5419,7 @@ async def cb_wd_confirm(cb: CallbackQuery):
         await safe_edit(
             cb,
             f"✅ <b>Request bhej di!</b>\n\n💰 {rs(res['amount_p'])}\n"
-            "Admin check karke paisa bhejega, bhejte hi aapko yahan message aayega 🙏",
+            f"🕒 Admin <b>{esc(WD_ETA_TEXT)}</b> me bhej dega. Bhejte hi yahan message aayega 🙏",
             back,
         )
     elif s == "has_pending":
@@ -4143,9 +5441,18 @@ async def wd_admin_view(w: dict) -> str:
     )
 
 
+def staff_back_kb() -> InlineKeyboardMarkup:
+    return kb([btn("⬅️ Pending list", "wa:list")])
+
+
+def who_did(w: dict) -> str:
+    return esc(w.get("by_name") or str(w.get("by") or "kisi admin"))
+
+
 @router.callback_query(F.data.startswith("wa:"))
 async def cb_wd_admin(cb: CallbackQuery):
-    if not is_admin(cb.from_user.id):
+    me = cb.from_user.id
+    if not is_staff(me):
         await cb.answer("⛔ Sirf admin ke liye", show_alert=True)
         return
     await cb.answer()
@@ -4156,69 +5463,74 @@ async def cb_wd_admin(cb: CallbackQuery):
         pend = [w async for w in withdrawals.find({"status": "pending"}).sort("created_at", 1).limit(10)]
         total = await withdrawals.count_documents({"status": "pending"})
         if not pend:
-            await safe_edit(cb, "💸 <b>Withdrawals</b>\n\n✅ Koi pending request nahi.", admin_back_kb())
+            await safe_edit(cb, "💸 <b>Withdrawals</b>\n\n✅ Koi pending request nahi.", None)
             return
-        await safe_edit(cb, f"💸 <b>Pending withdrawals: {total}</b>\nNeeche har request ka card aa raha hai 👇", admin_back_kb())
+        await safe_edit(cb, f"💸 <b>Pending withdrawals: {total}</b>\nNeeche har request ka card aa raha hai 👇", None)
         for w in pend:
-            await notify_withdrawal(w, from_list=True)
+            await notify_withdrawal(w, from_list=True, only=me)
         return
     w = await withdrawals.find_one({"_id": wid})
     if not w:
-        await bot.send_message(ADMIN_ID, "⚠️ Ye withdraw request nahi mili.")
+        await bot.send_message(me, "⚠️ Ye withdraw request nahi mili.")
         return
     info = await wd_admin_view(w)
     if action in ("paid", "rej", "resend") and w["status"] not in ("pending", "disputed"):
-        await bot.send_message(ADMIN_ID, f"ℹ️ Ye request ab <b>{esc(w['status'])}</b> hai.")
+        extra = f" (<b>{who_did(w)}</b> ne)" if w.get("by") else ""
+        await bot.send_message(me, f"ℹ️ Ye request pehle hi <b>{esc(w['status'])}</b> ho chuki hai{extra}.")
         return
     if action == "paid":
         await bot.send_message(
-            ADMIN_ID,
+            me,
             f"✅ Kya aapne ye paisa <b>bhej diya</b>?\n\n{info}",
-            reply_markup=kb([btn("✅ Haan, bhej diya", f"wa:paidy:{wid}")], [btn("↩️ Wapas", "adm:home")]),
+            reply_markup=kb([btn("✅ Haan, bhej diya", f"wa:paidy:{wid}")], [btn("↩️ Wapas", "wa:list")]),
         )
     elif action == "paidy":
         got = await withdrawals.find_one_and_update(
-            {"_id": wid, "status": "pending"}, {"$set": {"status": "paid", "paid_at": now_utc()}}
+            {"_id": wid, "status": "pending"},
+            {"$set": {"status": "paid", "paid_at": now_utc(), "by": me, "by_name": cb.from_user.full_name}},
         )
         if not got:
-            await bot.send_message(ADMIN_ID, "ℹ️ Ye request pehle hi process ho chuki hai.")
+            cur = await withdrawals.find_one({"_id": wid}) or {}
+            await bot.send_message(me, f"ℹ️ Ye pehle hi <b>{who_did(cur)}</b> ne process kar di hai (already done).")
             return
         await users.update_one({"_id": w["uid"]}, {"$inc": {"withdrawn_p": w["amount_p"]}})
         site_invalidate(w["uid"])
         await ask_user_confirm(w)
         await bot.send_message(
-            ADMIN_ID,
-            f"✅ <b>Paid mark ho gaya.</b> User se confirmation maangi gayi.\n\n{info}",
-            reply_markup=admin_back_kb(),
+            me, f"✅ <b>Paid mark ho gaya.</b> User se confirmation maangi gayi.\n\n{info}", reply_markup=staff_back_kb()
         )
-        await safe_log(f"💸 <b>Withdraw Paid</b>\n\n{info}")
+        spawn(sync_admin_cards(wid, f"✅ <b>Paid</b> — {esc(cb.from_user.full_name)} ne bhej diya.\n\n{info}"))
+        spawn(post_proof({**w, "status": "paid"}))
+        await safe_log(f"💸 <b>Withdraw Paid</b> (by {esc(cb.from_user.full_name)})\n\n{info}")
     elif action == "resend":
         await ask_user_confirm(w)
-        await bot.send_message(ADMIN_ID, "📨 User se dobara confirmation maangi gayi.", reply_markup=admin_back_kb())
+        await bot.send_message(me, "📨 User se dobara confirmation maangi gayi.", reply_markup=staff_back_kb())
     elif action == "rej":
         await bot.send_message(
-            ADMIN_ID,
+            me,
             f"❌ Ye request <b>reject</b> karein? Paisa user ke balance me wapas chala jayega.\n\n{info}",
-            reply_markup=kb([btn("✅ Haan, Reject", f"wa:rejy:{wid}")], [btn("↩️ Wapas", "adm:home")]),
+            reply_markup=kb([btn("✅ Haan, Reject", f"wa:rejy:{wid}")], [btn("↩️ Wapas", "wa:list")]),
         )
     elif action == "rejy":
         got = await withdrawals.find_one_and_update(
-            {"_id": wid, "status": "pending"}, {"$set": {"status": "rejected", "rejected_at": now_utc()}}
+            {"_id": wid, "status": "pending"},
+            {"$set": {"status": "rejected", "rejected_at": now_utc(), "by": me, "by_name": cb.from_user.full_name}},
         )
         if not got:
-            await bot.send_message(ADMIN_ID, "ℹ️ Ye request pehle hi process ho chuki hai.")
+            cur = await withdrawals.find_one({"_id": wid}) or {}
+            await bot.send_message(me, f"ℹ️ Ye pehle hi <b>{who_did(cur)}</b> ne process kar di hai (already done).")
             return
-        await users.update_one({"_id": w["uid"]}, {"$inc": {"balance_p": w["amount_p"]}})
-        site_invalidate(w["uid"])
+        await wallet_apply(w["uid"], w["amount_p"], "refund", ref=f"rej:{wid}", note="withdraw reject", by=me)
         await deliver(
             w["uid"],
             lambda cid: bot.send_message(
                 cid,
                 f"❌ Aapki <b>{rs(w['amount_p'])}</b> withdraw request verify nahi ho paayi.\n"
-                f"Paisa aapke balance me wapas aa gaya hai 💼\nMadad ke liye: {esc(SUPPORT_USERNAME)}",
+                f"Paisa aapke balance me <b>wapas aa gaya</b> hai 💼\nMadad ke liye: {esc(SUPPORT_USERNAME)}",
             ),
         )
-        await bot.send_message(ADMIN_ID, "✅ Reject ho gaya, paisa user ke balance me wapas.", reply_markup=admin_back_kb())
+        await bot.send_message(me, "✅ Reject ho gaya, paisa user ke balance me wapas.", reply_markup=staff_back_kb())
+        spawn(sync_admin_cards(wid, f"❌ <b>Reject</b> — {esc(cb.from_user.full_name)} ne reject kiya.\n\n{info}"))
 
 
 async def ask_user_confirm(w: dict) -> None:
@@ -4306,13 +5618,13 @@ async def settle_weekly_once() -> None:
                 cooldown=0,
             ))
             continue
-        fresh = True
-        try:
-            await config.insert_one({"_id": f"lbpay:{prev}:{d['_id']}", "uid": d["_id"], "rank": i + 1, "prize_p": prize_p, "at": now_utc()})
-            await users.update_one({"_id": d["_id"]}, {"$inc": {"balance_p": prize_p, "earned_p": prize_p}})
-            site_invalidate(d["_id"])
-        except DuplicateKeyError:
-            fresh = False  # pehle hi credit ho chuka
+        wres = await wallet_apply(d["_id"], prize_p, "leaderboard", ref=f"{prev}:{d['_id']}", note=f"#{i + 1} week {prev}")
+        fresh = bool(wres["ok"])  # dup = pehle hi credit ho chuka
+        if fresh:
+            try:
+                await config.insert_one({"_id": f"lbpay:{prev}:{d['_id']}", "uid": d["_id"], "rank": i + 1, "prize_p": prize_p, "at": now_utc()})
+            except DuplicateKeyError:
+                pass
         paid.append((i + 1, d, cnt, prize_p, fresh))
     try:
         res = await config.update_one(
@@ -4509,16 +5821,22 @@ def render_done(drop: dict, wall: list, reason: str) -> str:
     )
 
 
+def drop_video_row() -> list:
+    """Drop video link set ho to ek button row, warna kuch nahi."""
+    u = (LINKS.get("drop_video") or "").strip()
+    return [[btn("▶️ Drop kaise lein? Video dekho", url=u)]] if u.startswith(("http://", "https://")) else []
+
+
 def teaser_kb(no: int) -> InlineKeyboardMarkup:
-    return kb([btn("🔔 Remind Me", f"drop:remind:{no}")], [btn("📱 Open App", url=app_link())])
+    return kb([btn("🔔 Remind Me", f"drop:remind:{no}")], [btn("📱 Open App", url=app_link())], *drop_video_row())
 
 
 def live_kb(no: int, lucky: bool = False) -> InlineKeyboardMarkup:
-    return kb([btn("🎲 JOIN LUCKY DRAW" if lucky else "🎁 CLAIM NOW", f"drop:claim:{no}")], [btn("📱 Open App", url=app_link())])
+    return kb([btn("🎲 JOIN LUCKY DRAW" if lucky else "🎁 CLAIM NOW", f"drop:claim:{no}")], [btn("📱 Open App", url=app_link())], *drop_video_row())
 
 
 def done_kb() -> InlineKeyboardMarkup:
-    return kb([btn("📱 Open App", url=app_link())])
+    return kb([btn("📱 Open App", url=app_link())], *drop_video_row())
 
 
 # ---------------------------------------------------------------- channel helpers
@@ -5057,10 +6375,12 @@ async def main() -> None:
         "redeem": redeem_reward_core, "settings": settings_core,
         "invite": invite_core, "withdraw": withdraw_core,
     }
+    site_ctx["hooks"]["paid_stats"] = paid_stats
 
     # Mini App + health server pehle start (Koyeb health check pass ho)
     runner = await site_app.start_server(site_ctx, PORT)
     await init_db()
+    await ledger_opening_once()
 
     bot = Bot(
         BOT_TOKEN,
@@ -5081,6 +6401,8 @@ async def main() -> None:
     spawn(giveaway_watch_loop())
     spawn(withdraw_watch_loop())
     spawn(weekly_lb_loop())
+    spawn(referral_watch_loop())
+    spawn(autopost_loop())
     spawn(newuser_log_loop())
     spawn(alert_admin("startup", "🔄 <b>Bot start/restart hua</b> ✅\nAgar ye baar-baar aaye to Koyeb logs check karein.", cooldown=120))
 
