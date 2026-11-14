@@ -10,7 +10,7 @@ Routes
   POST /api/daily           -> daily bonus
   POST /api/remind          -> drop reminder ON
   POST /api/reward/redeem   -> reward card CLAIM (paisa seedha profile balance me)
-  POST /api/invite          -> invite code lagao (referrer ki Telegram ID)
+  POST /api/invite          -> invite code lagao (referrer ki Telegram ID); preview=true to pehle sirf naam dikhao
   POST /api/withdraw        -> withdraw request (UPI / bank / mobile)
   POST /api/settings        -> user settings (streak reminder)
 
@@ -23,6 +23,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -367,13 +368,63 @@ def personalize(sh: dict, uid: int) -> dict:
     }
 
 
+async def friend_rows(db: dict, uid: int, limit: int = 15) -> list:
+    """Mere dost + unka refer status (verify baaki / join baaki / pending / pakka / cancel)."""
+    users, refs = db["users"], db.get("referrals")
+    fr = [
+        d async for d in users.find(
+            {"ref_by": uid}, {"name": 1, "verified": 1, "ref_credited": 1, "banned": 1, "ref_at": 1, "joined_at": 1}
+        ).sort("ref_at", -1).limit(limit)
+    ]
+    rmap = {}
+    ids = [d["_id"] for d in fr]
+    if refs is not None and ids:
+        async for r in refs.find({"_id": {"$in": ids}}):
+            rmap[r["_id"]] = r
+    now = datetime.now(timezone.utc)
+    out = []
+    for d in fr:
+        r = rmap.get(d["_id"])
+        days_left = None
+        if d.get("banned"):
+            st = "banned"
+        elif r:
+            st = r.get("status") or "pending"
+            if st == "settling":
+                st = "pending"
+            ma = r.get("mature_at")
+            if st in ("pending", "held") and ma is not None:
+                if ma.tzinfo is None:
+                    ma = ma.replace(tzinfo=timezone.utc)
+                days_left = max(0, math.ceil((ma - now).total_seconds() / 86400))
+        elif d.get("ref_credited"):
+            st = "credited"  # v4 se pehle ke pakke refer
+        elif not d.get("verified"):
+            st = "verify"
+        else:
+            st = "join"
+        out.append({"name": d.get("name") or "Dost", "status": st, "days_left": days_left,
+                    "at": iso(d.get("ref_at") or d.get("joined_at"))})
+    return out
+
+
+async def ref_pending(db: dict, uid: int, reward_p: int) -> tuple:
+    """(pending dost count, pending paise)"""
+    refs = db.get("referrals")
+    if refs is None:
+        return 0, 0
+    n = await refs.count_documents({"ref": uid, "status": {"$in": ["pending", "settling", "held"]}})
+    return n, n * int(reward_p)
+
+
 async def build_me(db: dict, ctx: dict, uid: int, tg_user: dict, current_no) -> dict:
     users, entries, drop_claims, rewards = db["users"], db["entries"], db["drop_claims"], db["rewards"]
     ref_link = f"https://t.me/{ctx['public']['bot_username']}?start=ref_{uid}"
     u = await users.find_one({"_id": uid})
     if not u:
         return {"registered": False, "name": tg_user.get("first_name", ""), "ref_link": ref_link,
-                "invite_code": str(uid), "my_claims": [], "rewards": [], "withdrawals": []}
+                "invite_code": str(uid), "my_claims": [], "rewards": [], "withdrawals": [],
+                "ledger": [], "friends": [], "pending_n": 0, "pending_p": 0}
 
     entry = await entries.find_one({"_id": uid})
     refs = int(u.get("ref_count", 0))
@@ -405,8 +456,19 @@ async def build_me(db: dict, ctx: dict, uid: int, tg_user: dict, current_no) -> 
             wds.append({"id": w["_id"], "amount_p": int(w.get("amount_p", 0)), "method": w.get("method"),
                         "status": w.get("status"), "user_confirm": w.get("user_confirm"),
                         "at": iso(w.get("created_at"))})
+    led = []
+    if db.get("ledger") is not None:
+        async for e in db["ledger"].find({"uid": uid}).sort("at", -1).limit(20):
+            led.append({"amount_p": int(e.get("amount_p", 0)), "type": e.get("type"), "note": e.get("note") or "",
+                        "balance_after": e.get("balance_after"), "at": iso(e.get("at"))})
+    friends = await friend_rows(db, uid)
+    pend_n, pend_p = await ref_pending(db, uid, int(ctx["public"].get("ref_reward_p", 20)))
     return {
         "registered": True,
+        "ledger": led,
+        "friends": friends,
+        "pending_n": pend_n,
+        "pending_p": pend_p,
         "name": u.get("name") or tg_user.get("first_name", ""),
         "verified": bool(u.get("verified")),
         "banned": bool(u.get("banned")),
@@ -558,8 +620,17 @@ def create_app(ctx: dict) -> web.Application:
         finally:
             app["waiting"] -= 1
         payload = personalize(shared, uid)
+        paid_p, paid_n = 0, 0
+        hook = (ctx.get("hooks") or {}).get("paid_stats")
+        if hook:
+            try:
+                paid_p, paid_n = await hook()
+            except Exception:
+                logger.exception("paid_stats")
         payload.update(
             ok=True, server_ms=int(time.time() * 1000), me=me,
+            links={k: (v or "") for k, v in (ctx.get("links") or {}).items()},
+            paid={"total_p": paid_p, "count": paid_n},
             v=(ctx.get("live") or {}).get("v", 0),
             notice=(ctx.get("notice") or {}).get("text", ""),
             status=dict(ctx.get("status") or {}),
@@ -602,7 +673,8 @@ def create_app(ctx: dict) -> web.Application:
 
     async def api_invite(request):
         return await action(
-            request, "invite", lambda uid, b: (uid, str(b.get("code", ""))[:24]) if b.get("code") else None
+            request, "invite",
+            lambda uid, b: (uid, str(b.get("code", ""))[:24], bool(b.get("preview"))) if b.get("code") else None,
         )
 
     async def api_withdraw(request):
